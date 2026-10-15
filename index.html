@@ -1,0 +1,1076 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Server Stack Guide</title>
+<meta name="description" content="How to configure, deploy and operate the server-stack: Laravel Shopper, Bagisto and Odoo behind nginx.">
+<style>
+:root {
+  --bg: #f6f6f3; --surface: #ffffff; --surface-2: #f0f0ec; --fg: #1c1c1a; --muted: #62625d;
+  --line: #e2e2dc; --accent: #2f5bd3; --accent-soft: #e8eefc; --code-bg: #1e1f22; --code-fg: #e6e6e3;
+  --ok: #1c7c3a; --ok-soft: #e7f5ec; --warn: #9a5b00; --warn-soft: #fdf3e2; --bad: #b3261e; --bad-soft: #fcebea;
+  --radius: 10px; --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141413; --surface: #1c1c1b; --surface-2: #232321; --fg: #ececea; --muted: #a0a09a;
+    --line: #31312e; --accent: #8aa8ff; --accent-soft: #1f2a47; --code-bg: #0f0f10; --code-fg: #e6e6e3;
+    --ok: #5cc27d; --ok-soft: #16301f; --warn: #f0b35a; --warn-soft: #33270f; --bad: #ff8a80; --bad-soft: #3a1b19;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141413; --surface: #1c1c1b; --surface-2: #232321; --fg: #ececea; --muted: #a0a09a;
+  --line: #31312e; --accent: #8aa8ff; --accent-soft: #1f2a47; --code-bg: #0f0f10; --code-fg: #e6e6e3;
+  --ok: #5cc27d; --ok-soft: #16301f; --warn: #f0b35a; --warn-soft: #33270f; --bad: #ff8a80; --bad-soft: #3a1b19;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 16px; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+a { color: var(--accent); }
+.layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); max-width: 1240px; margin: 0 auto; }
+nav.toc { position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 28px 16px 28px 24px; border-right: 1px solid var(--line); font-size: 14px; }
+nav.toc .brand { font-weight: 700; font-size: 16px; margin-bottom: 4px; }
+nav.toc .sub { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+nav.toc ol { list-style: none; margin: 0; padding: 0; }
+nav.toc li a { display: block; padding: 5px 10px; border-radius: 6px; color: var(--fg); text-decoration: none; }
+nav.toc li a:hover, nav.toc li a.active { background: var(--accent-soft); color: var(--accent); }
+nav.toc li.sub a { padding-left: 24px; color: var(--muted); font-size: 13px; }
+main { padding: 32px 40px 80px; min-width: 0; }
+header.hero { margin-bottom: 32px; }
+header.hero h1 { font-size: 32px; line-height: 1.2; margin: 0 0 8px; }
+header.hero p { color: var(--muted); margin: 0; max-width: 70ch; }
+section { margin-top: 48px; }
+h2 { font-size: 24px; margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+h3 { font-size: 18px; margin: 28px 0 8px; }
+p, li { max-width: 78ch; }
+code { font-family: var(--mono); font-size: .88em; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+pre { position: relative; background: var(--code-bg); color: var(--code-fg); padding: 14px 16px; border-radius: var(--radius); overflow-x: auto; font: 13.5px/1.55 var(--mono); margin: 10px 0 16px; }
+pre code { background: none; padding: 0; font-size: inherit; color: inherit; }
+pre .c { color: #8b8f98; }
+.copy { position: absolute; top: 8px; right: 8px; font: 12px system-ui, sans-serif; background: #2c2e33; color: #d6d6d3; border: 1px solid #3a3c42; border-radius: 6px; padding: 3px 9px; cursor: pointer; opacity: .85; }
+.copy:hover { opacity: 1; }
+.table-wrap { overflow-x: auto; margin: 10px 0 18px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th, td { text-align: left; padding: 9px 12px; border-top: 1px solid var(--line); vertical-align: top; }
+thead th { border-top: 0; background: var(--surface-2); font-weight: 600; white-space: nowrap; }
+td code { white-space: nowrap; }
+.callout { border-radius: var(--radius); padding: 12px 16px; margin: 14px 0; border: 1px solid var(--line); background: var(--surface); }
+.callout.info { background: var(--accent-soft); border-color: transparent; }
+.callout.ok { background: var(--ok-soft); border-color: transparent; }
+.callout.warn { background: var(--warn-soft); border-color: transparent; }
+.callout.bad { background: var(--bad-soft); border-color: transparent; }
+.callout strong:first-child { display: block; margin-bottom: 2px; }
+.steps { counter-reset: step; list-style: none; padding: 0; }
+.steps > li { counter-increment: step; position: relative; padding: 2px 0 10px 44px; max-width: none; }
+.steps > li::before { content: counter(step); position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; display: grid; place-items: center; font-size: 14px; }
+.cards { display: grid; gap: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
+.card h3 { margin: 0 0 4px; font-family: var(--mono); font-size: 16px; }
+.card .what { color: var(--muted); margin: 0 0 10px; }
+.card dl { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 4px 12px; margin: 0; font-size: 14.5px; }
+.card dt { color: var(--muted); }
+.card dd { margin: 0; }
+.tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); margin-left: 6px; vertical-align: middle; font-family: system-ui, sans-serif; }
+.tag.safe { background: var(--ok-soft); color: var(--ok); }
+.tag.danger { background: var(--bad-soft); color: var(--bad); }
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 18px; }
+.flow span { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; font: 13px var(--mono); }
+.flow b { color: var(--muted); }
+.theme-toggle { margin-top: 18px; font: 13px system-ui, sans-serif; background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+footer { margin-top: 64px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); padding-top: 16px; }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  nav.toc { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 20px 16px; }
+  nav.toc ol { columns: 2; column-gap: 12px; }
+  main { padding: 24px 16px 64px; }
+  header.hero h1 { font-size: 26px; }
+  .card dl { grid-template-columns: 1fr; }
+  .card dt { margin-top: 6px; }
+}
+@media print { nav.toc, .copy, .theme-toggle { display: none; } .layout { display: block; } pre { white-space: pre-wrap; } }
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="toc" aria-label="Contents">
+  <div class="brand">Server Stack</div>
+  <div class="sub">Operator guide</div>
+  <ol>
+    <li><a href="#overview">1. What this is</a></li>
+    <li><a href="#before">2. Before you start</a></li>
+    <li><a href="#quickstart">3. First install</a></li>
+    <li><a href="#env">4. The .env file</a></li>
+    <li class="sub"><a href="#env-server">Server keys</a></li>
+    <li class="sub"><a href="#env-laravel">Laravel instance keys</a></li>
+    <li class="sub"><a href="#env-odoo">Odoo instance keys</a></li>
+    <li class="sub"><a href="#env-app">App (.env) keys</a></li>
+    <li><a href="#where">5. Where settings go</a></li>
+    <li><a href="#commands">6. Command reference</a></li>
+    <li><a href="#recipes">7. How to…</a></li>
+    <li><a href="#dns">8. DNS &amp; email</a></li>
+    <li><a href="#layout">9. Files on the server</a></li>
+    <li><a href="#logs">10. Logs &amp; health</a></li>
+    <li><a href="#trouble">11. Troubleshooting</a></li>
+    <li><a href="#security">12. Security checklist</a></li>
+    <li><a href="#releases">13. Releases &amp; git pull</a></li>
+    <li><a href="#credentials">14. Users &amp; passwords</a></li>
+    <li><a href="#database">15. Migrations, seeders &amp; rollback</a></li>
+    <li class="sub"><a href="#db-rollback-script">The rollback script</a></li>
+    <li class="sub"><a href="#db-rollback">Rolling back safely</a></li>
+    <li class="sub"><a href="#db-seeders">Custom seeders</a></li>
+    <li class="sub"><a href="#db-tags">Git tags</a></li>
+    <li><a href="#changes">Changelog</a></li>
+  </ol>
+  <button class="theme-toggle" type="button" id="themeToggle">Toggle dark / light</button>
+</nav>
+
+<main>
+<header class="hero">
+  <h1>Server Stack: operator guide</h1>
+  <p>Runs several <b>Laravel Shopper</b> shops, one <b>Bagisto</b> store and one <b>Odoo</b> ERP on a single Ubuntu 24.04 server,
+  behind nginx with PHP-FPM, PostgreSQL, MySQL and Redis. You write your settings once in <code>.env</code>, and the scripts generate every config file from it.</p>
+</header>
+
+<!-- ============================================================ -->
+<section id="overview">
+<h2>1. What this is</h2>
+<p>A folder (<code>/srv/stack</code> on the server) with three kinds of content:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Part</th><th>What it is</th><th>You…</th></tr></thead>
+<tbody>
+<tr><td><code>.env</code></td><td>Your real values: domains, email, mail password, which sites to run. <b>Git-ignored.</b></td><td><b>edit this</b></td></tr>
+<tr><td><code>sites/&lt;name&gt;/</code></td><td>Plain PHP/HTML websites kept in the repo (e.g. the shop1 page)</td><td>edit your pages here</td></tr>
+<tr><td><code>bin/*.sh</code></td><td>Scripts that install, configure, deploy and remove things</td><td>run them</td></tr>
+<tr><td><code>stack.env</code>, <code>instances/*.env</code></td><td>Committed <em>defaults</em> (placeholders). Real values go in <code>.env</code></td><td>rarely touch</td></tr>
+<tr><td><code>templates/</code>, <code>nginx/</code>, <code>php/</code>, <code>postgres/</code>…</td><td>Config blueprints the scripts fill in</td><td>only for tuning</td></tr>
+<tr><td><code>secrets/</code></td><td>Passwords generated on the server (DB, Redis, Odoo). <b>Git-ignored.</b></td><td>back up, never edit</td></tr>
+</tbody></table></div>
+
+<p>How a request travels:</p>
+<pre><code>browser ─► nginx :443 ─┬─► shop1.yourdomain  ─► PHP-FPM pool "shopper1" (PHP 8.3) ─► PostgreSQL + Redis
+                       ├─► shop2.yourdomain  ─► PHP-FPM pool "shopper2"            ─► PostgreSQL + Redis
+                       ├─► store.yourdomain  ─► PHP-FPM pool "bagisto"             ─► MySQL + Redis
+                       └─► erp.yourdomain    ─► Odoo :8069 / websocket :8072       ─► PostgreSQL</code></pre>
+<p>Each site (an <b>instance</b>) has its own Linux user, its own PHP pool, its own database and its own folder
+<code>/srv/apps/&lt;name&gt;</code>. One broken or hacked site can't touch another.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="before">
+<h2>2. Before you start</h2>
+<ul>
+  <li>A server with <b>Ubuntu 24.04 LTS</b>, at least 4 GB RAM (8–16 GB for all apps), and root SSH access.</li>
+  <li>A DNS <b>A record</b> for each domain pointing to the server IP (<a href="#dns">section 8</a>). SSL certificates only work once DNS resolves.</li>
+  <li>This repo on GitHub (private). The server clones it.</li>
+  <li>For Laravel apps deployed from git: a repo per app, plus a deploy key (<a href="#r-deploy">recipe</a>).</li>
+</ul>
+<div class="callout info"><strong>Running as root</strong>Commands are written with <code>sudo</code>. If you're logged in as <code>root</code> they work the same; <code>sudo</code> is simply ignored.</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="quickstart">
+<h2>3. First install</h2>
+<ol class="steps">
+<li><b>On your PC</b>, create your settings file from the template and fill it in (at minimum <code>INSTANCES</code>, <code>LETSENCRYPT_EMAIL</code> and each instance's <code>__SERVER_NAME</code>):
+<pre><code>cp .env.example .env</code></pre>
+</li>
+<li><b>Log in to the server</b>:
+<pre><code>ssh root@SERVER_IP</code></pre>
+</li>
+<li><b>Give the server read access to this repo.</b> The repo is private, and GitHub doesn't accept account passwords for <code>git clone</code>. Create a deploy key on the server:
+<pre><code>ssh-keygen -t ed25519 -C "server-stack@$(hostname)" -f ~/.ssh/server_stack -N ""
+cat ~/.ssh/server_stack.pub</code></pre>
+Add the printed line on GitHub (repo → Settings → Deploy keys → Add deploy key) and leave write access <b>unticked</b>. Then tell SSH to use it and test:
+<pre><code>printf 'Host github.com\n  HostName github.com\n  User git\n  IdentityFile ~/.ssh/server_stack\n  IdentitiesOnly yes\n' >> ~/.ssh/config && chmod 600 ~/.ssh/config
+ssh -T git@github.com</code></pre>
+It should greet you with <em>"Hi Khanaliasad/server-stack! You've successfully authenticated"</em>. Answer <code>yes</code> the first time.
+</li>
+<li><b>Get the stack</b> onto the server, over SSH (<code>git@github.com:…</code>, not <code>https://</code>):
+<pre><code>apt update && apt install -y git
+git clone git@github.com:Khanaliasad/server-stack.git /srv/stack</code></pre>
+Already cloned over https earlier? Switch it: <code>cd /srv/stack && git remote set-url origin git@github.com:Khanaliasad/server-stack.git && git pull</code>
+</li>
+<li><b>Copy your <code>.env</code></b> to the server. It's git-ignored, so it's not in the clone. Run this <b>from your PC</b>, in a second terminal:
+<pre><code>scp .env root@SERVER_IP:/srv/stack/.env</code></pre>
+</li>
+<li><b>Check the settings</b> (on the server). Fix any <code>ERROR</code> lines in <code>/srv/stack/.env</code>:
+<pre><code>cd /srv/stack && sudo bin/show-config.sh</code></pre>
+</li>
+<li><b>Build everything</b>. It installs packages, configures services, creates each site, publishes pages and gets certificates. It takes about 10–15 minutes and is safe to re-run.
+<pre><code>sudo bin/setup.sh</code></pre>
+If it stops with an error: fix the cause (or <code>git pull</code> a fix), then continue without repeating the slow package step. Everything already done is kept:
+<pre><code>cd /srv/stack && git pull && sudo bin/setup.sh --skip-install</code></pre>
+</li>
+<li><b>Open the site</b>: <code>https://shop1.yourdomain</code>. A new Laravel instance shows a <em>stack check page</em> (PHP version, extensions, database, Redis). A <code>sites/&lt;name&gt;/</code> folder, like shop1's phpinfo page, replaces it.</li>
+</ol>
+<div class="callout warn"><strong>If a certificate fails</strong>DNS isn't pointing at the server yet. Fix the A record, wait a few minutes, then run <code>sudo bin/issue-cert.sh shopper1</code>.</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="env">
+<h2>4. The <code>.env</code> file</h2>
+<p><code>/srv/stack/.env</code> is the <b>one file you edit</b>. It's git-ignored, so it never reaches GitHub. Keep a copy somewhere safe, such as a password manager.
+The template with every option is <code>.env.example</code>.</p>
+
+<h3>Four kinds of keys</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Form</th><th>Applies to</th><th>Example</th></tr></thead>
+<tbody>
+<tr><td><code>KEY=value</code></td><td>whole server (overrides <code>stack.env</code>)</td><td><code>LETSENCRYPT_EMAIL=asad@hsaverse.shop</code></td></tr>
+<tr><td><code>NAME__KEY=value</code></td><td>one instance (overrides <code>instances/name.env</code>)</td><td><code>SHOPPER1__SERVER_NAME="shop1.hsaverse.shop"</code></td></tr>
+<tr><td><code>APPENV_KEY=value</code></td><td>written into <b>every</b> Laravel app's <code>shared/.env</code> as <code>KEY=value</code></td><td><code>APPENV_MAIL_HOST=smtp-relay.brevo.com</code></td></tr>
+<tr><td><code>NAME__APPENV_KEY=value</code></td><td>written into <b>one</b> app's <code>shared/.env</code></td><td><code>SHOPPER1__APPENV_MAIL_FROM_NAME="Shop One"</code></td></tr>
+</tbody></table></div>
+<p><code>NAME</code> is the instance name in capitals, with <code>-</code> turned into <code>_</code>: <code>shopper1</code> → <code>SHOPPER1__</code>, <code>my-shop</code> → <code>MY_SHOP__</code>. There are two underscores.</p>
+
+<h3>Syntax rules</h3>
+<ul>
+  <li>No spaces around <code>=</code>. Wrong: <code>KEY = value</code>. Right: <code>KEY=value</code>.</li>
+  <li>Put values containing spaces in quotes: <code>SHOPPER1__SERVER_NAME="shop1.x.com www.shop1.x.com"</code>.</li>
+  <li>Use <b>single quotes</b> for values containing <code>$</code>, which is common in passwords: <code>APPENV_MAIL_PASSWORD='ab$cd'</code>.</li>
+  <li>An empty <code>APPENV_</code> value is skipped, so the app keeps its current value.</li>
+  <li>Lines starting with <code>#</code> are comments.</li>
+  <li>Editing on Windows (Notepad, VS Code) is fine: the scripts strip Windows line endings when they read env files.</li>
+</ul>
+
+<h3>Load order (later wins)</h3>
+<div class="flow"><span>stack.env</span><b>→</b><span>.env global keys</span><b>→</b><span>secrets/stack.env</span><b>→</b><span>instances/&lt;name&gt;.env</span><b>→</b><span>secrets/&lt;name&gt;.env</span><b>→</b><span>.env NAME__ keys</span></div>
+<p>So <code>SHOPPER1__PHP_VERSION=8.4</code> in <code>.env</code> beats <code>PHP_VERSION=8.3</code> in <code>instances/shopper1.env</code>.
+Run <code>sudo bin/show-config.sh</code> any time to see the final values.</p>
+
+<h3 id="env-server">Server keys (no prefix)</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Key</th><th>Default</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>INSTANCES</code></td><td>—</td><td>Space-separated list of sites this server runs. Used by <code>setup.sh</code> and <code>show-config.sh</code>. Example <code>"shopper1 bagisto odoo"</code></td></tr>
+<tr><td><code>LETSENCRYPT_EMAIL</code></td><td>placeholder</td><td>Email for SSL certificate expiry notices. <b>Required</b>: Let's Encrypt rejects <code>example.com</code></td></tr>
+<tr><td><code>PHP_VERSIONS</code></td><td><code>"8.2 8.3 8.4"</code></td><td>PHP versions installed side-by-side. Each instance picks one with <code>PHP_VERSION</code></td></tr>
+<tr><td><code>PG_VERSION</code></td><td><code>17</code></td><td>PostgreSQL major version</td></tr>
+<tr><td><code>NODE_MAJOR</code></td><td><code>24</code></td><td>Node.js version for building front-end assets</td></tr>
+<tr><td><code>REDIS_MAXMEMORY</code></td><td><code>1gb</code></td><td>Redis memory cap shared by all apps</td></tr>
+<tr><td><code>APPS_ROOT</code></td><td><code>/srv/apps</code></td><td>Parent folder of all instances. Change only <b>before</b> the first install</td></tr>
+</tbody></table></div>
+
+<h3 id="env-laravel">Laravel instance keys: prefix <code>NAME__</code></h3>
+<p>Defaults live in <code>instances/&lt;name&gt;.env</code>. Override any of them in <code>.env</code> with the prefix. Apply with <code>sudo bin/render.sh &lt;name&gt;</code>.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Key</th><th>Example</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>SERVER_NAME</code></td><td><code>"shop1.hsaverse.shop"</code></td><td>Domain(s), space separated. The first one is the certificate name and <code>APP_URL</code>. <b>Unique per instance</b></td></tr>
+<tr><td><code>PHP_VERSION</code></td><td><code>8.3</code></td><td>PHP version for this site (web, workers, composer). Must be listed in <code>PHP_VERSIONS</code></td></tr>
+<tr><td><code>ADMIN_PATH</code></td><td><code>cpanel</code> / <code>admin</code></td><td>Admin URL prefix. Used to rate-limit its login page</td></tr>
+<tr><td><code>UPLOAD_MAX</code></td><td><code>64M</code></td><td>Largest upload (nginx + PHP)</td></tr>
+<tr><td><code>FPM_PM</code></td><td><code>dynamic</code></td><td><code>dynamic</code> for busy sites, <code>ondemand</code> for quiet ones (frees memory when idle)</td></tr>
+<tr><td><code>FPM_MAX_CHILDREN</code></td><td><code>20</code></td><td>Maximum PHP processes, which is also the maximum number of simultaneous requests. About 60–120 MB each</td></tr>
+<tr><td><code>FPM_START_SERVERS</code>, <code>FPM_MIN_SPARE</code>, <code>FPM_MAX_SPARE</code></td><td><code>4</code>, <code>2</code>, <code>6</code></td><td>Idle process counts for <code>dynamic</code></td></tr>
+<tr><td><code>FPM_TIMEOUT</code></td><td><code>120</code></td><td>Seconds before a PHP request is killed</td></tr>
+<tr><td><code>PHP_MEMORY_LIMIT</code></td><td><code>512M</code></td><td>Memory per PHP request</td></tr>
+<tr><td><code>WORKERS_ENABLED</code></td><td><code>yes</code></td><td>Run queue workers + scheduler (supervisor). They start after the first real deploy</td></tr>
+<tr><td><code>QUEUE_WORKERS</code></td><td><code>2</code></td><td>Number of <code>queue:work</code> processes</td></tr>
+<tr><td><code>QUEUE_ARGS</code></td><td><code>"--queue=default --tries=3 …"</code></td><td>Arguments for <code>queue:work</code></td></tr>
+<tr><td><code>DB_ENGINE</code></td><td><code>pgsql</code> / <code>mysql</code></td><td>Shopper: <code>pgsql</code>. Bagisto: <code>mysql</code> (it has no PostgreSQL support). <code>none</code> = no database</td></tr>
+<tr><td><code>DB_NAME</code>, <code>DB_USER</code></td><td><code>shopper1</code></td><td>Database and user, created by <code>create-instance.sh</code>. <b>Unique per instance</b></td></tr>
+<tr><td><code>DB_HOST</code>, <code>DB_PORT</code></td><td><code>127.0.0.1</code>, <code>5432</code></td><td>Change only if the database moves to another server</td></tr>
+<tr><td><code>REDIS_DB</code>, <code>REDIS_CACHE_DB</code></td><td><code>0</code>, <code>1</code></td><td>Redis database numbers. <b>Unique per instance and different from each other</b>: <code>cache:clear</code> wipes the whole cache DB</td></tr>
+<tr><td><code>REPO_URL</code>, <code>REPO_BRANCH</code></td><td><code>git@github.com:you/app.git</code>, <code>main</code></td><td>Where <code>deploy-laravel.sh</code> gets the code</td></tr>
+<tr><td><code>BUILD_ASSETS</code></td><td><code>yes</code></td><td>Run <code>npm ci &amp;&amp; npm run build</code> during deploy</td></tr>
+<tr><td><code>APP_ENV_TEMPLATE</code></td><td><code>shopper.env.example</code></td><td>Which <code>app-env/</code> template starts the Laravel <code>.env</code></td></tr>
+<tr><td><code>RUN_SHOPPER_SETUP</code></td><td><code>first</code></td><td>Run <code>php artisan shopper:setup</code> during deploy: <code>no</code> (default) · <code>first</code> (only on the shop's first real deploy) · <code>always</code> (every deploy, only if the command is safe to repeat)</td></tr>
+<tr><td><code>SETUP_ADMIN_EMAIL</code>, <code>SETUP_ADMIN_PASSWORD</code></td><td><code>admin@hsaverse.shop</code>, <code>'…'</code></td><td>Admin login created by <code>shopper:setup</code> (<code>--admin-email</code>, <code>--admin-password</code>). <b>Both required</b> whenever the setup runs. Put the password in single quotes</td></tr>
+<tr><td><code>SETUP_STORE_NAME</code>, <code>SETUP_STORE_EMAIL</code></td><td><code>"Shop One"</code>, <code>shop1@hsaverse.shop</code></td><td><code>--store-name</code>, <code>--store-email</code></td></tr>
+<tr><td><code>SETUP_COUNTRY</code>, <code>SETUP_CURRENCIES</code></td><td><code>PK</code>, <code>PKR</code></td><td><code>--country</code>, <code>--currencies</code></td></tr>
+<tr><td><code>SETUP_STREET</code>, <code>SETUP_POSTAL_CODE</code>, <code>SETUP_CITY</code></td><td><code>"Main Rd 1"</code>, <code>54000</code>, <code>Lahore</code></td><td><code>--street</code>, <code>--postal-code</code>, <code>--city</code>. Empty settings are simply left out of the command</td></tr>
+<tr><td><code>FIRST_DEPLOY_ARTISAN</code>, <code>DEPLOY_ARTISAN</code></td><td><code>"cache:warm; my:command"</code></td><td>Other artisan commands to run during deploy (<code>;</code>-separated): on the first real deploy only / on every deploy. They run after migrations, before config caching</td></tr>
+</tbody></table></div>
+<p>Redis numbers already assigned: shopper1 <code>0/1</code>, shopper2 <code>2/3</code>, bagisto <code>4/5</code>. A new shop uses <code>6/7</code>, then <code>8/9</code>, and so on.</p>
+
+<h3 id="env-odoo">Odoo instance keys: prefix <code>ODOO__</code></h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Key</th><th>Default</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>SERVER_NAME</code></td><td>placeholder</td><td>Odoo domain, e.g. <code>"erp.hsaverse.shop"</code></td></tr>
+<tr><td><code>ODOO_VERSION</code></td><td><code>19.0</code></td><td>Git branch of Odoo. Check Python/PostgreSQL minimums before bumping</td></tr>
+<tr><td><code>ODOO_HTTP_PORT</code>, <code>ODOO_GEVENT_PORT</code></td><td><code>8069</code>, <code>8072</code></td><td>Local ports (nginx proxies them). Unique per Odoo instance</td></tr>
+<tr><td><code>ODOO_WORKERS</code></td><td><code>4</code></td><td>Worker processes. Dedicated server: CPU × 2 + 1</td></tr>
+<tr><td><code>ODOO_CRON_THREADS</code></td><td><code>1</code></td><td>Scheduled-action workers</td></tr>
+<tr><td><code>ODOO_MEM_SOFT</code>, <code>ODOO_MEM_HARD</code></td><td>1 GiB, 1.25 GiB</td><td>Per-worker memory limits (bytes)</td></tr>
+<tr><td><code>ODOO_LOG_LEVEL</code></td><td><code>warn</code></td><td><code>info</code> while debugging</td></tr>
+<tr><td><code>UPLOAD_MAX</code></td><td><code>200M</code></td><td>Largest upload / import file</td></tr>
+</tbody></table></div>
+<p>Odoo passwords (<code>DB_PASSWORD</code>, <code>ODOO_ADMIN_PASSWD</code>) are generated into <code>secrets/odoo.env</code>. Odoo's outgoing mail is set in its web UI (Settings → Technical → Outgoing Mail Servers), not in <code>.env</code>.</p>
+
+<h3 id="env-app">App keys: prefix <code>APPENV_</code></h3>
+<p>These end up in <code>/srv/apps/&lt;name&gt;/shared/.env</code>, the Laravel <code>.env</code>, as <code>KEY=value</code>.
+Apply with <code>sudo bin/sync-env.sh &lt;name&gt;</code>. Any Laravel key works. The useful ones:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Key (after the prefix)</th><th>Example</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>MAIL_MAILER</code>, <code>MAIL_HOST</code>, <code>MAIL_PORT</code></td><td><code>smtp</code>, <code>smtp-relay.brevo.com</code>, <code>587</code></td><td>Outgoing mail server</td></tr>
+<tr><td><code>MAIL_USERNAME</code>, <code>MAIL_PASSWORD</code></td><td>from Brevo → SMTP &amp; API</td><td>SMTP login + key</td></tr>
+<tr><td><code>MAIL_FROM_ADDRESS</code>, <code>MAIL_FROM_NAME</code></td><td><code>noreply@hsaverse.shop</code></td><td>Sender. The domain must be verified at your mail provider</td></tr>
+<tr><td><code>APP_TIMEZONE</code>, <code>APP_LOCALE</code></td><td><code>Asia/Karachi</code>, <code>en</code></td><td>Timezone / language</td></tr>
+<tr><td><code>APP_URL</code></td><td><code>https://shop1.hsaverse.shop</code></td><td>Set automatically at creation. Override it if you change the domain</td></tr>
+<tr><td><code>APP_DEBUG</code></td><td><code>false</code></td><td>Never <code>true</code> in production: it shows secrets on error pages</td></tr>
+<tr><td><code>LOG_LEVEL</code></td><td><code>warning</code></td><td><code>debug</code> while troubleshooting</td></tr>
+<tr><td><code>SESSION_LIFETIME</code></td><td><code>120</code></td><td>Minutes until logout</td></tr>
+<tr><td><code>FILESYSTEM_DISK</code>, <code>AWS_*</code></td><td><code>public</code> / <code>s3</code></td><td>Where uploads go. Use S3 when you have several servers</td></tr>
+<tr><td><code>APP_CURRENCY</code>, <code>APP_ADMIN_URL</code>, <code>RESPONSE_CACHE_ENABLED</code></td><td><code>USD</code>, <code>admin</code>, <code>true</code></td><td>Bagisto only (use <code>BAGISTO__APPENV_…</code>)</td></tr>
+</tbody></table></div>
+<div class="callout info"><strong>Not managed by <code>.env</code></strong><code>APP_KEY</code>, <code>DB_PASSWORD</code> and <code>REDIS_PASSWORD</code> are generated once by <code>create-instance.sh</code>. Changing <code>DB_PASSWORD</code> in the app would break its connection, so don't override it.</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="where">
+<h2>5. Where settings go</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>File</th><th>Holds</th><th>In git?</th><th>Edited by</th></tr></thead>
+<tbody>
+<tr><td><code>/srv/stack/.env</code></td><td>All your real values</td><td>❌ ignored</td><td><b>you</b></td></tr>
+<tr><td><code>/srv/stack/stack.env</code>, <code>instances/*.env</code></td><td>Defaults / placeholders</td><td>✅</td><td>rarely</td></tr>
+<tr><td><code>/srv/stack/secrets/*.env</code></td><td>Generated passwords</td><td>❌ ignored</td><td>scripts</td></tr>
+<tr><td><code>/srv/apps/&lt;name&gt;/shared/.env</code></td><td>The Laravel app's own <code>.env</code></td><td>❌ (on server only)</td><td>scripts + <code>sync-env.sh</code></td></tr>
+<tr><td><code>/etc/nginx/sites-enabled/&lt;name&gt;.conf</code></td><td>Generated nginx site</td><td>—</td><td><code>render.sh</code> (don't edit)</td></tr>
+<tr><td><code>/etc/php/&lt;ver&gt;/fpm/pool.d/&lt;name&gt;.conf</code></td><td>Generated PHP pool</td><td>—</td><td><code>render.sh</code> (don't edit)</td></tr>
+<tr><td><code>/etc/supervisor/conf.d/&lt;name&gt;.conf</code></td><td>Generated queue workers</td><td>—</td><td><code>render.sh</code> (don't edit)</td></tr>
+<tr><td><code>/etc/odoo/odoo.conf</code>, <code>odoo-odoo.service</code></td><td>Generated Odoo config</td><td>—</td><td><code>render.sh</code> (don't edit)</td></tr>
+</tbody></table></div>
+<div class="callout warn"><strong>Never edit generated files</strong>The next <code>render.sh</code> overwrites them. Change <code>.env</code> (or a template) and re-render instead.</div>
+
+<h3>I changed… → now run</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>You changed</th><th>Run</th></tr></thead>
+<tbody>
+<tr><td>A <code>NAME__</code> key (domain, PHP version, pool size, workers)</td><td><code>sudo bin/render.sh &lt;name&gt;</code></td></tr>
+<tr><td>A domain (<code>NAME__SERVER_NAME</code>)</td><td><code>sudo bin/render.sh &lt;name&gt;</code>, then <code>sudo bin/issue-cert.sh &lt;name&gt;</code> (and set <code>NAME__APPENV_APP_URL</code>)</td></tr>
+<tr><td>An <code>APPENV_</code> key (mail, timezone…)</td><td><code>sudo bin/sync-env.sh &lt;name&gt;</code> for each Laravel site</td></tr>
+<tr><td>A page in <code>sites/&lt;name&gt;/</code></td><td><code>git pull</code>, then <code>sudo bin/publish-site.sh &lt;name&gt;</code></td></tr>
+<tr><td>App code in the app's own git repo</td><td><code>sudo bin/deploy-laravel.sh &lt;name&gt;</code></td></tr>
+<tr><td><code>INSTANCES</code> (added a site)</td><td><code>sudo bin/setup.sh --skip-install</code></td></tr>
+<tr><td><code>PHP_VERSIONS</code>, <code>PG_VERSION</code>, <code>NODE_MAJOR</code></td><td><code>sudo bin/00-install-base.sh</code>, then <code>sudo bin/10-configure-services.sh</code></td></tr>
+<tr><td><code>REDIS_MAXMEMORY</code>, anything in <code>nginx/</code>, <code>php/</code>, <code>postgres/</code>, <code>mysql/</code></td><td><code>sudo bin/10-configure-services.sh</code></td></tr>
+<tr><td>Pulled a new version of this stack from GitHub</td><td><code>sudo bin/setup.sh --skip-install</code></td></tr>
+</tbody></table></div>
+</section>
+
+<!-- ============================================================ -->
+<section id="commands">
+<h2>6. Command reference</h2>
+<p>Run everything from <code>/srv/stack</code> on the server. Scripts marked <span class="tag safe">safe to re-run</span> never overwrite your data or passwords.</p>
+<div class="cards">
+
+<div class="card"><h3>bin/setup.sh <span class="tag safe">safe to re-run</span></h3>
+<p class="what">Does everything in order: checks config → installs packages → configures services → creates each site in <code>INSTANCES</code> → publishes <code>sites/</code> pages → gets certificates.</p>
+<dl><dt>When</dt><dd>First install; after adding a site to <code>INSTANCES</code>; after <code>git pull</code> of the stack</dd>
+<dt>Usage</dt><dd><code>sudo bin/setup.sh</code></dd>
+<dt>Options</dt><dd><code>--skip-install</code> skip the (slow) package step · <code>--no-certs</code> skip SSL</dd></dl></div>
+
+<div class="card"><h3>bin/show-config.sh <span class="tag safe">read-only</span></h3>
+<p class="what">Prints the final settings of each site after all overrides. Flags placeholders, duplicate domains, duplicate Redis DBs and duplicate ports. Masks passwords.</p>
+<dl><dt>When</dt><dd>After every <code>.env</code> edit, before running anything else</dd>
+<dt>Usage</dt><dd><code>sudo bin/show-config.sh</code> · <code>sudo bin/show-config.sh shopper1 bagisto</code></dd></dl></div>
+
+<div class="card"><h3>bin/00-install-base.sh <span class="tag safe">safe to re-run</span></h3>
+<p class="what">Installs system packages: nginx (nginx.org), PHP versions + extensions, PostgreSQL, MySQL, Redis, Node.js, supervisor, certbot, composer.</p>
+<dl><dt>When</dt><dd>First install (via setup.sh); after changing <code>PHP_VERSIONS</code> / <code>PG_VERSION</code> / <code>NODE_MAJOR</code></dd>
+<dt>Usage</dt><dd><code>sudo bin/00-install-base.sh</code></dd></dl></div>
+
+<div class="card"><h3>bin/10-configure-services.sh <span class="tag safe">safe to re-run</span></h3>
+<p class="what">Links the stack's configs into nginx, PHP, PostgreSQL, MySQL and Redis. Generates the Redis password, tunes the kernel, and enables the firewall (80, 443 and the port sshd actually listens on, even a custom one). Backs up the original configs first.</p>
+<dl><dt>When</dt><dd>First install; after changing files in <code>nginx/</code>, <code>php/</code>, <code>postgres/</code>, <code>mysql/</code>, <code>system/</code></dd>
+<dt>Usage</dt><dd><code>sudo bin/10-configure-services.sh</code></dd></dl></div>
+
+<div class="card"><h3>bin/create-instance.sh &lt;name&gt; <span class="tag safe">safe to re-run</span></h3>
+<p class="what">One-time setup of a site: Linux user, <code>/srv/apps/&lt;name&gt;</code> folders, database + user with a random password, the Laravel <code>shared/.env</code> (with <code>APPENV_</code> values), and the stack check page. It also repairs a user left over from an earlier failed attempt (missing home folder).</p>
+<dl><dt>When</dt><dd>Once per new site (setup.sh does it)</dd>
+<dt>Usage</dt><dd><code>sudo bin/create-instance.sh shopper2</code></dd>
+<dt>Note</dt><dd>An existing <code>shared/.env</code> or secrets file is never overwritten</dd></dl></div>
+
+<div class="card"><h3>bin/render.sh &lt;name&gt; <span class="tag safe">safe to re-run</span></h3>
+<p class="what">Regenerates the site's nginx config, PHP-FPM pool, queue workers (and for Odoo its config + service) from the templates and your settings. Tests them, then reloads the services.</p>
+<dl><dt>When</dt><dd>After changing any <code>NAME__</code> setting</dd>
+<dt>Usage</dt><dd><code>sudo bin/render.sh shopper1</code></dd>
+<dt>Note</dt><dd>Stops with an error if a required setting is missing, so nothing half-configured goes live</dd></dl></div>
+
+<div class="card"><h3>bin/publish-site.sh &lt;name&gt;</h3>
+<p class="what">Makes <code>sites/&lt;name&gt;/</code> from this repo the live web root (a new release, switched instantly). For plain PHP/HTML sites like the shop1 page.</p>
+<dl><dt>When</dt><dd>After editing and pulling a page in <code>sites/</code></dd>
+<dt>Usage</dt><dd><code>sudo bin/publish-site.sh shopper1</code></dd></dl></div>
+
+<div class="card"><h3>bin/issue-cert.sh &lt;name&gt; <span class="tag safe">safe to re-run</span></h3>
+<p class="what">Gets a free Let's Encrypt SSL certificate for every domain in <code>SERVER_NAME</code>, then re-renders. Renewal is automatic.</p>
+<dl><dt>When</dt><dd>After DNS points at the server; after adding or changing a domain</dd>
+<dt>Usage</dt><dd><code>sudo bin/issue-cert.sh shopper1</code></dd></dl></div>
+
+<div class="card"><h3>bin/deploy-laravel.sh &lt;name&gt; [branch|tag] [options]</h3>
+<p class="what">Zero-downtime deploy of a Laravel app from its git repo: clone → composer → npm build → <code>storage:link</code> + <code>shopper:link</code> (recreates the admin's <code>public/cpanel</code> link for each release) → <b>database backup</b> (only if migrations are pending) → migrate → optional seeders → cache → write a release record → switch <code>current</code> → reload PHP → restart workers. Keeps the last 5 releases and the last 5 backups.</p>
+<dl><dt>When</dt><dd>Every time you release app code</dd>
+<dt>Usage</dt><dd><code>sudo bin/deploy-laravel.sh shopper1</code> · <code>sudo bin/deploy-laravel.sh shopper1 v1.2.0</code> · <code>sudo bin/deploy-laravel.sh shopper1 v1.2.0 --seed=CategorySeeder</code></dd>
+<dt>Options</dt><dd><code>--seed</code> runs <code>DatabaseSeeder</code> · <code>--seed=Class</code> runs one seeder (repeat for more) · <code>--backup</code> always back up first · <code>--no-backup</code> never back up · <code>--artisan="cmd"</code> one extra artisan command, this deploy only</dd>
+<dt>App commands</dt><dd>From settings: <code>RUN_SHOPPER_SETUP</code> (<code>shopper:setup</code> with the <code>SETUP_*</code> values), <code>FIRST_DEPLOY_ARTISAN</code>, <code>DEPLOY_ARTISAN</code>. Order: migrate → seeders → app commands → cache → switch. If one fails, the new version doesn't go live</dd>
+<dt>If it fails</dt><dd>The live site keeps its old code. If it failed <b>after</b> migrations ran, it prints the exact command to undo them (<a href="#db-deploy-fail">details</a>)</dd>
+<dt>Needs</dt><dd><code>NAME__REPO_URL</code> + a deploy key (<a href="#r-deploy">recipe</a>)</dd></dl></div>
+
+<div class="card"><h3>bin/rollback.sh &lt;name&gt; [release] [mode] <span class="tag danger">changes the live site</span></h3>
+<p class="what">Switches a Laravel site back to an earlier release. If the database changed since then, it shows <b>exactly which migrations</b> would be undone, previews the SQL, and makes you type the count before doing anything. Nothing older than the target release is ever touched.</p>
+<dl><dt>When</dt><dd>A deploy broke something and you want the previous version back</dd>
+<dt>Usage</dt><dd><code>sudo bin/rollback.sh shopper1 --list</code> (only shows, changes nothing) · <code>sudo bin/rollback.sh shopper1</code> (one release back, asks what to do) · <code>sudo bin/rollback.sh shopper1 20261001120000</code> (a specific release)</dd>
+<dt>Modes</dt><dd><code>--with-migrations</code> undo the newer migrations, then switch · <code>--code-only</code> switch the code only · <code>--restore-backup</code> restore the pre-deploy backup (loses all data since; asks you to type <code>RESTORE</code>) · <code>--yes</code> no questions (needs a mode)</dd>
+<dt>More</dt><dd><a href="#db-rollback-script">How the rollback decides and counts</a></dd></dl></div>
+
+<div class="card"><h3>bin/shopper-setup.sh &lt;shop&gt; [--dry-run]</h3>
+<p class="what">Runs your app's <code>php artisan shopper:setup</code> on the live release, building the options from the shop's <code>SETUP_*</code> settings in <code>.env</code>: admin email and password, store name and email, country, currencies, street, postal code, city.</p>
+<dl><dt>When</dt><dd>Setting up a shop that's already deployed (so its first deploy is past), or re-running the setup after changing the values</dd>
+<dt>Usage</dt><dd><code>sudo bin/shopper-setup.sh shopper1 --dry-run</code> (shows the command, password hidden, runs nothing) · <code>sudo bin/shopper-setup.sh shopper1</code></dd>
+<dt>Needs</dt><dd>At least <code>NAME__SETUP_ADMIN_EMAIL</code> and <code>NAME__SETUP_ADMIN_PASSWORD</code>. It stops with a clear message if they're empty</dd></dl></div>
+
+<div class="card"><h3>bin/sync-env.sh &lt;name&gt; <span class="tag safe">safe to re-run</span></h3>
+<p class="what">Writes the <code>APPENV_</code> values from <code>.env</code> into the app's <code>shared/.env</code>, then refreshes Laravel's config cache, PHP and the workers.</p>
+<dl><dt>When</dt><dd>After changing mail or any other <code>APPENV_</code> key</dd>
+<dt>Usage</dt><dd><code>sudo bin/sync-env.sh shopper1</code></dd></dl></div>
+
+<div class="card"><h3>bin/install-odoo.sh &lt;name&gt; <span class="tag safe">safe to re-run</span></h3>
+<p class="what">Installs Odoo's build libraries, wkhtmltopdf (PDF reports) and rtlcss. Clones/updates the Odoo source, builds the Python venv, initialises the database, and starts the service.</p>
+<dl><dt>When</dt><dd>First Odoo install (setup.sh does it); to pull Odoo updates</dd>
+<dt>Usage</dt><dd><code>sudo bin/install-odoo.sh odoo</code></dd></dl></div>
+
+<div class="card"><h3>bin/check-php-ext.sh [version] <span class="tag safe">read-only</span></h3>
+<p class="what">Checks that every PHP extension Laravel, Shopper and Bagisto need is present, for both CLI and FPM, and prints the <code>apt install</code> fix for anything missing.</p>
+<dl><dt>Usage</dt><dd><code>bin/check-php-ext.sh 8.3</code> · <code>bin/check-php-ext.sh 8.4 laravel shopper</code></dd></dl></div>
+
+<div class="card"><h3>bin/uninstall.sh [names] [options] <span class="tag danger">removes things</span></h3>
+<p class="what">Undoes the setup. <b>By default it removes only generated settings</b>. Packages, <code>.env</code> files, passwords, app files, databases and certificates are kept, and <code>setup.sh</code> brings everything back.</p>
+<dl><dt>Usage</dt><dd><code>sudo bin/uninstall.sh --dry-run</code> (preview) · <code>sudo bin/uninstall.sh</code> (all settings) · <code>sudo bin/uninstall.sh shopper2</code> (one site)</dd>
+<dt>Delete more</dt><dd><code>--apps</code> files + user · <code>--databases</code> · <code>--certs</code> · <code>--secrets</code> · <code>--packages</code> (also wipes DB data) · <code>--everything</code>. Any of these needs you to type <code>DELETE</code></dd>
+<dt>Kept always</dt><dd>The firewall stays on; <code>/srv/stack</code> and your <code>.env</code> stay</dd></dl></div>
+
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="recipes">
+<h2>7. How to…</h2>
+
+<h3 id="r-page">Update the main website (hsaverse.shop)</h3>
+<p>The main domain is the <code>website</code> instance: type <code>site</code>, a plain PHP/HTML site with no database, no Laravel and no workers.
+Its files live in this repo at <code>sites/website/</code>.</p>
+<ol>
+<li>On your PC, edit <code>sites/website/index.php</code>. It's a single self-contained intro page: hero, stores, "why us", how it works, contact. The texts, store names and links are plain HTML, so search for the words you want to change. Colours are CSS variables at the top of <code>&lt;style&gt;</code> (<code>--violet</code>, <code>--cyan</code>, <code>--pink</code>). Put images in the same folder, then commit and push.</li>
+<li>On the server:
+<pre><code>cd /srv/stack && git pull && sudo bin/publish-site.sh website</code></pre></li>
+</ol>
+<p>Any site type can be published from <code>sites/&lt;name&gt;/</code> the same way. shopper1 used <code>sites/shopper1/</code> (the phpinfo page) until its first Laravel deploy.</p>
+<p>A second plain site: copy <code>instances/website.env</code> to <code>instances/&lt;name&gt;.env</code>, set <code>APP_NAME=&lt;name&gt;</code>, create <code>sites/&lt;name&gt;/index.php</code>, add <code>&lt;NAME&gt;__SERVER_NAME</code> + the name to <code>INSTANCES</code> in <code>.env</code>, then run <code>sudo bin/setup.sh --skip-install</code>.</p>
+<div class="callout warn"><strong>Only <code>index.php</code> runs as PHP</strong>By design, other <code>.php</code> files return 404. Route extra pages through <code>index.php</code> (e.g. <code>index.php?page=about</code>) or use <code>.html</code> files. Remove <code>phpinfo()</code> before going public.</div>
+
+<h3 id="r-add">Add another website (e.g. shopper2)</h3>
+<ol>
+<li>Add a DNS A record, e.g. <code>shop2</code> → server IP.</li>
+<li>In <code>/srv/stack/.env</code>:
+<pre><code>INSTANCES="shopper1 shopper2"
+SHOPPER2__SERVER_NAME="shop2.hsaverse.shop"</code></pre></li>
+<li>Check and apply:
+<pre><code>sudo bin/show-config.sh
+sudo bin/setup.sh --skip-install</code></pre></li>
+</ol>
+<p>For a brand-new name (e.g. <code>shopper3</code>), first copy the instance file, then edit its <code>&lt;-- UNIQUE</code> lines (APP_NAME, DB_NAME, DB_USER, REDIS_DB, REDIS_CACHE_DB):</p>
+<pre><code>cp instances/shopper2.env instances/shopper3.env</code></pre>
+
+<h3 id="r-deploy">Deploy a Laravel app from GitHub</h3>
+<p>Each site runs as its own Linux user, so <b>each site needs its own deploy key</b>, even when two sites deploy the same repo
+(shopper1 and shopper2 both use <code>Khanaliasad/shopper</code>). GitHub allows several deploy keys on one repo.
+Don't reuse the server-stack key: GitHub allows a key on one repo only.</p>
+<ol>
+<li>Create a key for each site's user and print it (run after <code>setup.sh</code> has created the users):
+<pre><code>for u in shopper1 shopper2; do
+  sudo -u $u -H ssh-keygen -t ed25519 -N "" -f /srv/apps/$u/.ssh/id_ed25519 -C "$u@server"
+  sudo cat /srv/apps/$u/.ssh/id_ed25519.pub
+done</code></pre></li>
+<li>On GitHub, go to the app repo → Settings → Deploy keys → Add. Add <b>each</b> printed line as its own key, read-only.</li>
+<li>Trust GitHub once per user:
+<pre><code>for u in shopper1 shopper2; do sudo -u $u -H ssh -o StrictHostKeyChecking=accept-new -T git@github.com; done</code></pre></li>
+<li>Set <code>SHOPPER1__REPO_URL=git@github.com:Khanaliasad/shopper.git</code> (same for <code>SHOPPER2__</code>) in <code>.env</code>, then deploy:
+<pre><code>sudo bin/deploy-laravel.sh shopper1
+sudo bin/deploy-laravel.sh shopper2</code></pre>
+The first deploy replaces the check page / <code>sites/</code> page and starts the queue workers. Apps without a <code>package-lock.json</code> are built with <code>npm install</code> instead of <code>npm ci</code>.</li>
+<li>First time only, set up the shop (admin user + store details). Fill in the <code>SHOPPER1__SETUP_…</code> values in <code>/srv/stack/.env</code>
+(<a href="#env-laravel">keys</a>). With <code>SHOPPER1__RUN_SHOPPER_SETUP=first</code>, the first deploy runs <code>shopper:setup</code> by itself.
+For a shop that's already deployed, run it directly:
+<pre><code>sudo bin/shopper-setup.sh shopper1 --dry-run    <span class="c"># check the command first</span>
+sudo bin/shopper-setup.sh shopper1</code></pre>
+Bagisto: run <code>artisan bagisto:install</code> as the site user.</li>
+</ol>
+
+<h3 id="r-mail">Set up email for the Laravel apps</h3>
+<ol>
+<li>Create a free <b>Brevo</b> account and verify your domain (DNS records in <a href="#dns">section 8</a>).</li>
+<li>Copy the SMTP login and key from Brevo → SMTP &amp; API into <code>.env</code>:
+<pre><code>APPENV_MAIL_USERNAME=your-login@smtp-brevo.com
+APPENV_MAIL_PASSWORD='your-smtp-key'
+APPENV_MAIL_FROM_ADDRESS=noreply@hsaverse.shop</code></pre></li>
+<li>Push to each app:
+<pre><code>sudo bin/sync-env.sh shopper1</code></pre></li>
+</ol>
+
+<h3 id="r-php">Change a site's PHP version</h3>
+<pre><code><span class="c"># the version must be in PHP_VERSIONS (installed); check its extensions first</span>
+bin/check-php-ext.sh 8.4
+<span class="c"># .env:  SHOPPER1__PHP_VERSION=8.4</span>
+sudo bin/render.sh shopper1</code></pre>
+<p>The site moves to the new PHP immediately. The nginx config doesn't change. The workers, composer and artisan follow on the next deploy (or run <code>sudo bin/deploy-laravel.sh shopper1</code>).</p>
+
+<h3 id="r-domain">Change or add a domain</h3>
+<pre><code><span class="c"># .env:  SHOPPER1__SERVER_NAME="shop1.hsaverse.shop www.shop1.hsaverse.shop"</span>
+<span class="c">#        SHOPPER1__APPENV_APP_URL=https://shop1.hsaverse.shop</span>
+sudo bin/render.sh shopper1
+sudo bin/issue-cert.sh shopper1
+sudo bin/sync-env.sh shopper1</code></pre>
+
+<h3 id="r-tune">Give a busy site more capacity</h3>
+<pre><code><span class="c"># .env:  SHOPPER1__FPM_MAX_CHILDREN=40   SHOPPER1__QUEUE_WORKERS=4</span>
+sudo bin/render.sh shopper1</code></pre>
+<p>Rule of thumb: total <code>FPM_MAX_CHILDREN</code> across all sites × ~100 MB must fit in the RAM you can spare for PHP.</p>
+
+<h3 id="r-odoo">Install Odoo</h3>
+<pre><code><span class="c"># DNS: erp → server IP.   .env:  INSTANCES="shopper1 odoo"   ODOO__SERVER_NAME="erp.hsaverse.shop"</span>
+sudo bin/setup.sh --skip-install</code></pre>
+<p>Log in at <code>https://erp.hsaverse.shop</code> as <code>admin</code> / <code>admin</code> and <b>change the password immediately</b>.</p>
+
+<h3 id="r-rollback">Roll back a bad deploy</h3>
+<pre><code><span class="c"># 1. look first: this changes nothing</span>
+sudo bin/rollback.sh shopper1 --list
+<span class="c"># 2. go one release back; the script explains what it will do and asks before each change</span>
+sudo bin/rollback.sh shopper1</code></pre>
+<p>If the release you're leaving changed the database, you choose between undoing those migrations, switching the code only, or restoring the backup.
+See <a href="#db-rollback-script">how the rollback decides and counts</a>.</p>
+
+<h3 id="r-update">Update this stack</h3>
+<pre><code>cd /srv/stack && git pull
+sudo bin/show-config.sh
+sudo bin/setup.sh --skip-install</code></pre>
+
+<h3 id="r-move">Move everything to a new server</h3>
+<ol>
+<li>Back up on the old server: <code>/srv/stack/.env</code>, <code>/srv/stack/secrets/</code>, database dumps, <code>/srv/apps/*/shared/</code>, <code>/srv/apps/odoo/data/</code>.</li>
+<li>On the new server: clone the stack, restore <code>.env</code> and <code>secrets/</code>, then run <code>sudo bin/setup.sh --no-certs</code>.</li>
+<li>Restore the databases and <code>shared/</code> folders, then point DNS at the new IP and run <code>issue-cert.sh</code> for each site.</li>
+</ol>
+
+<h3 id="r-reset">Start over / remove things</h3>
+<pre><code>sudo bin/uninstall.sh --dry-run                           <span class="c"># see what would happen</span>
+sudo bin/uninstall.sh                                     <span class="c"># remove all settings, keep data</span>
+sudo bin/setup.sh --skip-install                          <span class="c"># …and build it again</span>
+sudo bin/uninstall.sh shopper2 --apps --databases --certs <span class="c"># delete one site completely</span></code></pre>
+</section>
+
+<!-- ============================================================ -->
+<section id="dns">
+<h2>8. DNS &amp; email records</h2>
+<p>Add these at your domain provider. Replace <code>SERVER_IP</code> with your server's IP.</p>
+<h3>Websites</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Type</th><th>Name</th><th>Value</th><th>For</th></tr></thead>
+<tbody>
+<tr><td>A</td><td><code>shop1</code></td><td><code>SERVER_IP</code></td><td>shopper1</td></tr>
+<tr><td>A</td><td><code>shop2</code></td><td><code>SERVER_IP</code></td><td>shopper2</td></tr>
+<tr><td>A</td><td><code>store</code></td><td><code>SERVER_IP</code></td><td>bagisto</td></tr>
+<tr><td>A</td><td><code>erp</code></td><td><code>SERVER_IP</code></td><td>odoo</td></tr>
+<tr><td>A</td><td><code>@</code> and <code>www</code></td><td><code>SERVER_IP</code></td><td>website (main domain)</td></tr>
+<tr><td>CAA</td><td><code>@</code></td><td><code>0 issue "letsencrypt.org"</code></td><td>optional hardening</td></tr>
+</tbody></table></div>
+<h3>Email: Zoho Mail (free mailbox) + Brevo (app emails)</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Type</th><th>Name</th><th>Value</th><th>Priority</th></tr></thead>
+<tbody>
+<tr><td>MX</td><td><code>@</code></td><td><code>mx.zoho.com</code> · <code>mx2.zoho.com</code> · <code>mx3.zoho.com</code></td><td>10 · 20 · 50</td></tr>
+<tr><td>TXT</td><td><code>@</code></td><td><code>v=spf1 include:zohomail.com include:spf.brevo.com ~all</code></td><td></td></tr>
+<tr><td>TXT</td><td><code>@</code></td><td><code>zoho-verification=…</code> and <code>brevo-code:…</code> (from their dashboards)</td><td></td></tr>
+<tr><td>TXT</td><td><code>zmail._domainkey</code></td><td>DKIM key from Zoho</td><td></td></tr>
+<tr><td>CNAME</td><td><code>brevo1._domainkey</code>, <code>brevo2._domainkey</code></td><td>from Brevo</td><td></td></tr>
+<tr><td>TXT</td><td><code>_dmarc</code></td><td><code>v=DMARC1; p=none; rua=mailto:you@yourdomain</code></td><td></td></tr>
+</tbody></table></div>
+<div class="callout warn"><strong>Only one SPF record</strong>It must start with <code>v=spf1</code> and list every sender. Two SPF records break email. If Zoho puts your account in a region, use its servers (<code>mx.zoho.eu</code> / <code>mx.zoho.in</code>). After two good weeks, change DMARC to <code>p=quarantine</code>.</div>
+<p>Check DNS from your PC: <code>nslookup shop1.hsaverse.shop 8.8.8.8</code></p>
+</section>
+
+<!-- ============================================================ -->
+<section id="layout">
+<h2>9. Files on the server</h2>
+<pre><code>/srv/stack/                     this repo (+ your .env and secrets/)
+/srv/apps/&lt;laravel-site&gt;/
+  ├── current -&gt; releases/…     what nginx serves (switched atomically)
+  ├── releases/                 last 5 deploys (000-bootstrap = check page)
+  └── shared/
+      ├── .env                  the Laravel app's .env (mode 600)
+      ├── storage/              uploads, cache, Laravel logs
+      ├── logs/                 php-error, php-slow, queue, scheduler logs
+      └── tmp/
+/srv/apps/odoo/
+  ├── src/  venv/  custom-addons/  logs/
+  └── data/                     filestore + sessions (back this up!)
+/etc/nginx/sites-enabled/       generated sites
+/etc/php/&lt;ver&gt;/fpm/pool.d/      generated pools
+/etc/supervisor/conf.d/         generated workers
+/etc/odoo/                      generated Odoo config</code></pre>
+</section>
+
+<!-- ============================================================ -->
+<section id="logs">
+<h2>10. Logs &amp; health</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>What</th><th>Where / command</th></tr></thead>
+<tbody>
+<tr><td>Web requests / nginx errors</td><td><code>/var/log/nginx/&lt;name&gt;.access.log</code>, <code>…error.log</code></td></tr>
+<tr><td>PHP errors, slow requests</td><td><code>/srv/apps/&lt;name&gt;/shared/logs/php-error.log</code>, <code>php-slow.log</code></td></tr>
+<tr><td>Laravel app log</td><td><code>/srv/apps/&lt;name&gt;/shared/storage/logs/</code></td></tr>
+<tr><td>Queue / scheduler</td><td><code>shared/logs/queue.log</code> · <code>sudo supervisorctl status</code></td></tr>
+<tr><td>Odoo</td><td><code>/srv/apps/odoo/logs/odoo.log</code> · <code>systemctl status odoo-odoo</code></td></tr>
+<tr><td>Service status</td><td><code>systemctl status nginx php8.3-fpm postgresql mysql redis-server</code></td></tr>
+<tr><td>Follow a log live</td><td><code>tail -f /var/log/nginx/shopper1.error.log</code></td></tr>
+<tr><td>PHP pool load</td><td><code>curl -sk --resolve shop1.hsaverse.shop:443:127.0.0.1 https://shop1.hsaverse.shop/fpm-status</code></td></tr>
+</tbody></table></div>
+<h3>Backups (run daily via cron)</h3>
+<pre><code>sudo -u postgres pg_dump -Fc shopper1 &gt; /backup/shopper1-$(date +%F).dump
+sudo mysqldump --single-transaction bagisto | gzip &gt; /backup/bagisto-$(date +%F).sql.gz
+sudo tar czf /backup/files-$(date +%F).tgz /srv/stack/.env /srv/stack/secrets /srv/apps/*/shared /srv/apps/odoo/data</code></pre>
+</section>
+
+<!-- ============================================================ -->
+<section id="trouble">
+<h2>11. Troubleshooting</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Symptom</th><th>Cause → fix</th></tr></thead>
+<tbody>
+<tr><td><code>show-config</code>: <code>SERVER_NAME is a placeholder</code></td><td>Set <code>NAME__SERVER_NAME</code> in <code>.env</code>, or remove the site from <code>INSTANCES</code></td></tr>
+<tr><td><code>render.sh</code>: <code>needs ${X}</code></td><td>A required setting is missing. Add <code>NAME__X</code> to <code>.env</code></td></tr>
+<tr><td>Browser shows a certificate warning</td><td>No real certificate yet → <code>sudo bin/issue-cert.sh &lt;name&gt;</code></td></tr>
+<tr><td><code>issue-cert</code> fails</td><td>DNS doesn't point here yet, or port 80 is blocked by your provider's firewall. Check with <code>nslookup</code></td></tr>
+<tr><td>Site doesn't load at all / connection closed</td><td>The domain isn't in any <code>SERVER_NAME</code> (unknown hosts are dropped) → fix <code>.env</code> + <code>render.sh</code></td></tr>
+<tr><td>502 Bad Gateway</td><td>PHP pool down → <code>sudo systemctl status php8.3-fpm</code>; see <code>shared/logs/php-error.log</code>. Odoo: <code>systemctl status odoo-odoo</code></td></tr>
+<tr><td>Changed code / .env but site shows the old one</td><td>OPcache and the config cache → use <code>publish-site.sh</code>, <code>deploy-laravel.sh</code> or <code>sync-env.sh</code>. They reload PHP for you</td></tr>
+<tr><td>429 Too Many Requests</td><td>Rate limit hit (20 req/s per IP, 10/min on the admin login). Tune in <code>nginx/nginx.conf</code></td></tr>
+<tr><td>Deploy: <code>requires ext-&lt;name&gt; * -&gt; it is missing from your system</code> (e.g. <code>ext-soap</code>)</td><td>The app needs a PHP extension the server lacks → <code>sudo apt install -y php8.3-&lt;name&gt; &amp;&amp; sudo systemctl restart php8.3-fpm</code>, then deploy again. Add it to <code>PHP_EXT</code> in <code>bin/00-install-base.sh</code> so new servers get it too. Never use <code>--ignore-platform-req</code>: the code would crash at runtime instead</td></tr>
+<tr><td>Deploy: <code>Permission denied (publickey)</code></td><td>The site user has no deploy key → <a href="#r-deploy">recipe</a></td></tr>
+<tr><td>Emails not arriving / in spam</td><td>SPF/DKIM/DMARC missing or the sender domain isn't verified at Brevo (<a href="#dns">section 8</a>)</td></tr>
+<tr><td><code>git clone</code> / <code>git pull</code> asks for a password, or <code>Permission denied (publickey)</code> / <code>Repository not found</code></td><td>The repo is private. Password login no longer works on GitHub → set up the server's deploy key and use the <code>git@github.com:</code> URL (<a href="#quickstart">First install, step 3</a>). Check it with <code>ssh -T git@github.com</code></td></tr>
+<tr><td><code>setup.sh</code>: <code>chmod: cannot access '/srv/apps/&lt;name&gt;'</code></td><td>Fixed in the scripts: an old user from an earlier attempt had no home folder → <code>git pull</code>, then <code>sudo bin/setup.sh --skip-install</code></td></tr>
+<tr><td>Locked out of SSH after setup</td><td>Shouldn't happen: the firewall opens the port sshd really uses. If it does, use your provider's web console (VNC) and run <code>ufw allow &lt;port&gt;/tcp</code></td></tr>
+<tr><td>A script says <code>bad interpreter</code></td><td>Windows line endings in a <b>script</b> (env files are handled automatically) → <code>sed -i 's/\r$//' bin/*.sh</code></td></tr>
+<tr><td>Sites feel slow</td><td>Check memory first: <code>free -h</code> (plenty of <code>available</code> and 0 swap used = RAM is fine). Then measure where the time goes:<br><code>curl -o /dev/null -s -w "connect %{time_connect}s TLS %{time_appconnect}s first-byte %{time_starttransfer}s total %{time_total}s\n" https://shop1.hsaverse.shop/</code><br>A slow <b>first-byte</b> means PHP/app time. The first hit after a deploy is always slower (warm-up). In <code>top</code>, an <code>st</code> (steal) value above ~5–10 means the VPS host is short on CPU</td></tr>
+<tr><td>Something is badly broken</td><td><code>sudo bin/uninstall.sh</code>, then <code>sudo bin/setup.sh --skip-install</code> rebuilds all settings; data is kept</td></tr>
+</tbody></table></div>
+</section>
+
+<!-- ============================================================ -->
+<section id="security">
+<h2>12. Security checklist</h2>
+<ul>
+  <li>Keep the GitHub repo <b>private</b>. Never commit <code>.env</code> or <code>secrets/</code> (already git-ignored).</li>
+  <li><code>.env</code> is mode <code>600</code> (setup.sh enforces it). Keep a copy in a password manager.</li>
+  <li>Remove <code>phpinfo()</code> from public pages once testing is done.</li>
+  <li>Use SSH keys and disable password login (<code>PasswordAuthentication no</code> in <code>/etc/ssh/sshd_config</code>) once your key works.</li>
+  <li><code>APP_DEBUG=false</code> in every production app.</li>
+  <li>Change Odoo's <code>admin</code> password on the first login.</li>
+  <li>Databases and Redis only listen on localhost. The firewall allows only SSH, 80 and 443.</li>
+  <li>Run <code>sudo apt update &amp;&amp; sudo apt upgrade</code> monthly (security updates for PHP, nginx and the rest).</li>
+</ul>
+</section>
+
+<!-- ============================================================ -->
+<section id="releases">
+<h2>13. Releases &amp; where to run <code>git pull</code></h2>
+<p>There are <b>two kinds of repos</b>, and they update in different ways:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Repo</th><th>Holds</th><th>How it reaches the server</th></tr></thead>
+<tbody>
+<tr><td><code>server-stack</code> → <code>/srv/stack</code></td><td>Scripts, configs, this guide, <code>sites/</code> pages (the main website)</td><td><code>git pull</code> in <code>/srv/stack</code>, then run the matching command</td></tr>
+<tr><td>Your app repos (e.g. <code>shopper</code>) → <code>/srv/apps/&lt;name&gt;</code></td><td>Laravel application code</td><td><b>Never <code>git pull</code></b>. Use <code>sudo bin/deploy-laravel.sh &lt;name&gt;</code></td></tr>
+</tbody></table></div>
+
+<h3>1. Stack repo: the only place you run <code>git pull</code></h3>
+<pre><code>cd /srv/stack && git pull</code></pre>
+<div class="table-wrap"><table>
+<thead><tr><th>What changed</th><th>Then run</th></tr></thead>
+<tbody>
+<tr><td>Main website page (<code>sites/website/</code>)</td><td><code>sudo bin/publish-site.sh website</code></td></tr>
+<tr><td>A site's settings (<code>instances/</code>, templates)</td><td><code>sudo bin/render.sh &lt;name&gt;</code></td></tr>
+<tr><td>Scripts / configs, or not sure</td><td><code>sudo bin/setup.sh --skip-install</code></td></tr>
+</tbody></table></div>
+<div class="callout info"><strong><code>.env</code> is not pulled</strong>It's git-ignored, so edit it on the server (<code>nano /srv/stack/.env</code>). <code>git pull</code> never overwrites it.</div>
+
+<h3>2. App repos: deploy, never pull</h3>
+<pre><code>cd /srv/stack
+sudo bin/deploy-laravel.sh shopper1
+sudo bin/deploy-laravel.sh shopper2</code></pre>
+<p>Every deploy builds a <b>complete fresh copy next to the live one</b>, then switches over in a single instant:</p>
+<pre><code>/srv/apps/shopper1/
+├── current  →  releases/20261002143000     ← live site (just a pointer)
+├── releases/
+│   ├── 20261001120000                       ← previous release, kept for rollback
+│   └── 20261002143000                       ← newest
+└── shared/                                  ← survives every release
+    ├── .env                                 config + passwords
+    └── storage/                             uploads, logs, cache</code></pre>
+<ol class="steps">
+<li><b>Clone</b> your repo into a new <code>releases/&lt;date-time&gt;</code>. The live site keeps running meanwhile.</li>
+<li><b>Link</b> <code>shared/.env</code> and <code>shared/storage</code>, so settings and uploads carry over.</li>
+<li><b>Build</b>: <code>composer install</code>, <code>npm run build</code>, migrations, Laravel caches.</li>
+<li><b>Switch</b>: <code>current</code> moves to the new folder in one step, <b>only if everything above succeeded</b>. A failed deploy leaves the live site untouched.</li>
+<li><b>Refresh</b>: PHP reloads, queue workers restart, and only the last 5 releases are kept.</li>
+</ol>
+<div class="callout bad"><strong>Why not <code>git pull</code> in the live folder?</strong>Visitors would see half-updated files. It would skip composer, the build, migrations and the caches, leave the code stale in OPcache, and leave no clean way back.</div>
+
+<h3>Everyday workflow</h3>
+<div class="flow"><span>PC: edit code</span><b>→</b><span>git commit &amp;&amp; git push</span><b>→</b><span>server: sudo bin/deploy-laravel.sh shopper1</span></div>
+
+<h3>Deploy a specific version</h3>
+<pre><code><span class="c"># on your PC</span>
+git tag v1.2 && git push --tags
+<span class="c"># on the server</span>
+sudo bin/deploy-laravel.sh shopper1 v1.2</code></pre>
+<p>More on tags in <a href="#db-tags">Git tags</a>.</p>
+
+<h3>Roll back</h3>
+<p>Switching back only moves the <code>current</code> pointer, so it takes seconds. The database is a separate question, because every release shares it.
+<code>bin/rollback.sh</code> handles both: it tells you whether the database changed and asks what to do.</p>
+<pre><code>sudo bin/rollback.sh shopper1 --list     <span class="c"># show releases, change nothing</span>
+sudo bin/rollback.sh shopper1            <span class="c"># one release back, guided</span></code></pre>
+<p>Details: <a href="#db-rollback-script">how the rollback decides and counts</a>.</p>
+
+<h3>Odoo</h3>
+<p>Odoo isn't deployed from your own repo. Update Odoo itself with <code>sudo bin/install-odoo.sh odoo</code>. Put your own modules in
+<code>/srv/apps/odoo/custom-addons/</code> and upgrade them from Odoo's Apps menu, or from the command line:</p>
+<pre><code>sudo systemctl stop odoo-odoo
+sudo -u odoo -H /srv/apps/odoo/venv/bin/python3 /srv/apps/odoo/src/odoo-bin -c /etc/odoo/odoo.conf -d odoo -u &lt;module&gt; --stop-after-init
+sudo systemctl start odoo-odoo</code></pre>
+</section>
+
+<!-- ============================================================ -->
+<section id="credentials">
+<h2>14. Users &amp; passwords</h2>
+<p>Everything lives <b>on the server only</b>. None of it is in GitHub. Passwords are random and generated during setup.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>What</th><th>Username</th><th>Password / access</th><th>Where to find it</th></tr></thead>
+<tbody>
+<tr><td>Site Linux users (folder owners)</td><td><code>website</code>, <code>shopper1</code>, <code>shopper2</code>, <code>odoo</code></td><td><b>No password</b> (by design, can't log in over SSH)</td><td>Become one: <code>sudo -u shopper1 -H bash</code></td></tr>
+<tr><td>nginx web user</td><td><code>www-data</code></td><td>No password</td><td>—</td></tr>
+<tr><td>PostgreSQL: shops</td><td><code>shopper1</code>, <code>shopper2</code></td><td>Random</td><td><code>DB_PASSWORD</code> in <code>/srv/apps/&lt;shop&gt;/shared/.env</code></td></tr>
+<tr><td>PostgreSQL: Odoo</td><td><code>odoo</code></td><td>Random</td><td><code>DB_PASSWORD</code> in <code>/srv/stack/secrets/odoo.env</code></td></tr>
+<tr><td>PostgreSQL superuser</td><td><code>postgres</code></td><td>No password; root only</td><td><code>sudo -u postgres psql</code></td></tr>
+<tr><td>MySQL root</td><td><code>root</code></td><td>No password; root only</td><td><code>sudo mysql</code> (used only by Bagisto)</td></tr>
+<tr><td>Redis</td><td>—</td><td>Random</td><td><code>REDIS_PASSWORD</code> in <code>/srv/stack/secrets/stack.env</code></td></tr>
+<tr><td>Odoo master password</td><td>—</td><td>Random</td><td><code>ODOO_ADMIN_PASSWD</code> in <code>/srv/stack/secrets/odoo.env</code></td></tr>
+<tr><td>Odoo login</td><td><code>admin</code></td><td>Set by you on first login</td><td>Odoo's database</td></tr>
+<tr><td>Shopper admin logins</td><td>your email</td><td>Set in <code>shopper:user</code></td><td>Stored hashed, can't be read back. Create a new one to reset</td></tr>
+<tr><td>Laravel <code>APP_KEY</code></td><td>—</td><td>Random</td><td><code>APP_KEY</code> in each <code>shared/.env</code></td></tr>
+<tr><td>Brevo SMTP</td><td>Brevo login</td><td>SMTP key</td><td><code>/srv/stack/.env</code></td></tr>
+<tr><td>GitHub deploy keys</td><td>—</td><td>SSH keys</td><td><code>/root/.ssh/server_stack</code>, <code>/srv/apps/&lt;shop&gt;/.ssh/</code></td></tr>
+<tr><td>SSL certificates</td><td>—</td><td>Auto-renewing</td><td><code>/etc/letsencrypt/live/&lt;domain&gt;/</code></td></tr>
+</tbody></table></div>
+
+<h3>Show every generated password at once</h3>
+<pre><code>sudo grep -H -E '^(DB_|REDIS_PASSWORD|APP_KEY|ODOO_ADMIN)' /srv/stack/secrets/*.env /srv/apps/*/shared/.env</code></pre>
+<div class="callout warn"><strong>Treat the output as secret</strong>Don't paste it into chats, tickets or screenshots.</div>
+
+<h3>Reset a Shopper admin login</h3>
+<pre><code>sudo -u shopper1 -H php8.3 /srv/apps/shopper1/current/artisan shopper:user</code></pre>
+
+<h3>Connect to a database yourself</h3>
+<pre><code>sudo -u postgres psql -d shopper1        <span class="c"># PostgreSQL shop DB (as superuser)</span>
+sudo -u postgres psql -d odoo            <span class="c"># Odoo DB</span>
+sudo mysql                               <span class="c"># MySQL (Bagisto)</span></code></pre>
+<p>From a desktop tool (DBeaver, TablePlus), use an <b>SSH tunnel</b>: SSH host <code>SERVER_IP</code> as root, then DB host <code>127.0.0.1</code> port <code>5432</code>, with a user and password from the table above. Databases never listen on the internet.</p>
+
+<div class="callout bad"><strong>Must never be lost: <code>APP_KEY</code></strong>Laravel encrypts sessions and encrypted fields with it. Losing or changing it makes that data unreadable. Store every value above in a password manager, and back up <code>/srv/stack/.env</code>, <code>/srv/stack/secrets/</code> and <code>/srv/apps/*/shared/</code> (<a href="#logs">backup commands</a>).</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="database">
+<h2>15. Migrations, seeders &amp; rollback</h2>
+
+<h3>What a deploy does with the database</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Item</th><th>Behaviour</th></tr></thead>
+<tbody>
+<tr><td>Migrations</td><td><code>artisan migrate --force</code> runs on <b>every</b> deploy, in the new release, <b>before</b> <code>current</code> switches. If a migration fails, the deploy stops and the live site keeps its old code</td></tr>
+<tr><td>Seeders</td><td>Only when you ask: <code>--seed=Class</code> on the deploy command runs them after migrations, <b>before</b> the switch (<a href="#db-seeders">below</a>)</td></tr>
+<tr><td>Database</td><td><b>One per site</b> (<code>shopper1</code>, <code>shopper2</code>), shared by every kept release</td></tr>
+<tr><td>Backup before deploy</td><td><b>Automatic when migrations are pending</b>: a full copy goes to <code>/srv/apps/&lt;site&gt;/shared/backups/</code> (the last 5 are kept, root-only). <code>--backup</code> forces one; <code>--no-backup</code> skips it</td></tr>
+<tr><td>Release record</td><td>Each release folder gets a <code>.release</code> file with its git tag/branch, commit, deploy time, database batch before/after, backup file and seeders. <code>rollback.sh</code> reads it. It sits outside <code>public/</code>, so it's never served</td></tr>
+</tbody></table></div>
+
+<h3>What the deploy prints about the database</h3>
+<pre><code>==&gt; Database: batch 6, 1 pending migration(s)
+==&gt; Backing up shopper1 -&gt; /srv/apps/shopper1/shared/backups/20261002143000-before-a1b2c3d.dump
+==&gt; Migrating
+==&gt; Deployed shopper1 @ v1.3.0 (a1b2c3d)  migrations: batch 6 -&gt; 7  backup: …</code></pre>
+<p><b>Batch</b> is Laravel's counter of <code>migrate</code> runs. <code>batch 6 -&gt; 7</code> means this deploy changed the database once.
+<code>batch 6 -&gt; 6</code> means it didn't change it at all.</p>
+
+<h3 id="db-deploy-fail">If a deploy fails halfway</h3>
+<ul>
+<li><b>Failed before migrations</b> (composer, npm build): nothing changed. The live site and database are exactly as before.</li>
+<li><b>Failed after migrations</b> (a seeder or the cache step): the live site still runs the <b>old code</b>, but the database already has the <b>new schema</b>.
+The deploy prints a warning with the exact command to undo it, run from the failed release, which has the migration files:</li>
+</ul>
+<pre><code>!! Deploy failed AFTER migrations ran. The live site still runs the old code,
+!! but the database already has the new schema (batch &gt; 6).
+!! Undo the migrations from the failed release (it has the migration files):
+     sudo -u shopper1 -H /usr/bin/php8.3 /srv/apps/shopper1/releases/20261002143000/artisan migrate:rollback --force
+!! Pre-deploy backup: /srv/apps/shopper1/shared/backups/20261002143000-before-a1b2c3d.dump</code></pre>
+<p>This undoes only the batch that failed deploy created. Or fix the problem and deploy again: the new deploy sees the migrations as already done.</p>
+<pre><code>releases/20261001  (old code) ─┐
+releases/20261002  (new code) ─┼──►  ONE database: shopper1
+current → 20261002             ─┘    (already has the new schema)</code></pre>
+<div class="callout warn"><strong>Rolling back code does not roll back the database</strong>After switching <code>current</code> back, your <b>old code runs against the new schema</b>. Whether that works depends on what the migration did.</div>
+
+<h3>Will the old code survive the new schema?</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>The new release's migration…</th><th>Old code after rollback</th></tr></thead>
+<tbody>
+<tr><td>Added a table</td><td>✅ fine: old code ignores it</td></tr>
+<tr><td>Added a nullable column, or one with a default</td><td>✅ fine</td></tr>
+<tr><td>Added a <b>NOT NULL</b> column <b>without</b> a default</td><td>❌ old code's inserts fail</td></tr>
+<tr><td>Renamed a column / table</td><td>❌ old code queries the old name and crashes</td></tr>
+<tr><td>Dropped a column / table</td><td>❌ crashes, and the data is gone</td></tr>
+<tr><td>Changed a column type</td><td>⚠️ depends on the change</td></tr>
+</tbody></table></div>
+
+<h3 id="db-rollback-script">The rollback script: how it decides and counts</h3>
+<p><code>sudo bin/rollback.sh shopper1</code> does this, in order, and changes nothing until you confirm:</p>
+<ol class="steps">
+<li><b>Lists the releases</b>, with their tag, commit, deploy time and database batch. The live one is marked <code>*</code>.
+<pre><code>Releases of shopper1 (database is at migration batch 7):
+    RELEASE            REF          COMMIT    DEPLOYED          MIGRATIONS / BACKUP
+    20261001120000     v1.2.0       9f8e7d6   2026-10-01 12:00  batch 5 -&gt; 6
+  * 20261002143000     v1.3.0       a1b2c3d   2026-10-02 14:30  batch 6 -&gt; 7, backup</code></pre></li>
+<li><b>Picks the target</b>: the release just before the live one, or the one you name.</li>
+<li><b>Compares batches.</b> The target's record says the database was at <b>batch 6</b> while it was live, and the database is now at <b>batch 7</b>.</li>
+<li><b>Lists only the migrations in batches above the target's</b>, by name, straight from the database. Their count is the exact number of steps:
+<pre><code>The database is at batch 7; 20261001120000 expects batch 6.
+Only these 1 migration(s), from the 1 newer batch(es), would be undone
+(batch  migration). Everything at batch 6 and older stays as it is:
+  7  2026_10_02_000000_drop_old_price_column</code></pre></li>
+<li><b>Asks what you want</b>: 1) undo those migrations, then switch · 2) code only · 3) restore the backup · q) cancel.</li>
+<li><b>Dry run.</b> For option 1, it prints the SQL the undo would run (<code>migrate:rollback --pretend</code>). Nothing has changed yet.</li>
+<li><b>You type the number</b> (<code>1</code> here) to confirm. Any other answer aborts with nothing changed.</li>
+<li><b>Undoes exactly that many steps</b> (<code>migrate:rollback --step=1</code>), from the <b>live</b> release, which has the migration files.
+It then <b>checks</b> the database is back at the target's batch. If not, it stops <b>without</b> switching the code.</li>
+<li><b>Switches</b> <code>current</code> to the target, reloads PHP and restarts the queue workers.</li>
+</ol>
+<div class="table-wrap"><table>
+<thead><tr><th>Situation</th><th>What the script does</th></tr></thead>
+<tbody>
+<tr><td>No migrations newer than the target</td><td>Says a code-only rollback is safe, and only switches the code</td></tr>
+<tr><td>Going back several releases</td><td>Counts every migration in <b>all</b> batches above the target (e.g. batches 6 and 7 = 3 migrations) and undoes exactly those</td></tr>
+<tr><td>The target is at batch 0</td><td><b>Refuses</b>: that would undo every migration and empty the database</td></tr>
+<tr><td>The target has no release record (deployed before this feature, or a bootstrap/site page)</td><td>Refuses <code>--with-migrations</code> (it can't know what to undo). Code-only or restore-backup are still possible</td></tr>
+<tr><td>Restore-backup chosen</td><td>Uses the backup the <b>next</b> deploy took (the database as it was while the target was live). Maintenance mode on, workers stopped, restore, switch, back online. You must type <code>RESTORE</code></td></tr>
+</tbody></table></div>
+<div class="callout warn"><strong>Releases deployed before this update have no record</strong>Only deploys made with the new script can be rolled back <em>with migrations</em>. Deploy once after pulling this update, so the next rollback has records to work with.</div>
+
+<h3 id="db-rollback">Rolling back safely: three options, best first</h3>
+
+<p><b>1. Write migrations old code survives ("expand, then contract").</b> This is standard practice, and it makes 99% of rollbacks code-only.
+Never rename or drop in the same release that stops using something:</p>
+<ol class="steps">
+<li><b>Release A</b>: add the new column (nullable). The code writes to <b>both</b> the old and new column.</li>
+<li><b>Release B</b>: the code reads the new column. A migration copies old data across.</li>
+<li><b>Release C</b>, once B is proven stable: drop the old column.</li>
+</ol>
+
+<p><b>2. Undo the migration with <code>migrate:rollback</code>.</b> <code>bin/rollback.sh</code> does this for you, with the count and checks above.
+The manual steps below are what it does under the hood, in case you ever need them.
+Laravel records each <code>migrate</code> run as a numbered <b>batch</b>
+in the <code>migrations</code> table, and <code>migrate:rollback</code> runs the <code>down()</code> methods of the last batch.
+<b>Order matters:</b> run it from the <b>new</b> release, which contains the new migration files, <b>before</b> switching back.
+The old release doesn't know those migrations exist, so the rollback fails from there.</p>
+<pre><code><span class="c"># 1. see which batch the last deploy created</span>
+sudo -u shopper1 -H php8.3 /srv/apps/shopper1/current/artisan migrate:status
+<span class="c"># 2. undo it — still from the NEW release (current)</span>
+sudo -u shopper1 -H php8.3 /srv/apps/shopper1/current/artisan migrate:rollback --step=1 --force
+<span class="c"># 3. only now switch the code back</span>
+ls /srv/apps/shopper1/releases/
+sudo -u shopper1 ln -sfn /srv/apps/shopper1/releases/&lt;older-folder&gt; /srv/apps/shopper1/current
+sudo systemctl reload php8.3-fpm
+sudo -u shopper1 -H php8.3 /srv/apps/shopper1/current/artisan queue:restart</code></pre>
+<p><code>--step=1</code> undoes one migration file. Use <code>migrate:rollback --force</code> without <code>--step</code> to undo the whole last batch
+(everything one deploy ran). A deploy with no new migrations creates <b>no</b> batch, so check <code>migrate:status</code> first.
+Preview what a migration will do before deploying: <code>artisan migrate --pretend</code>.</p>
+<div class="callout bad"><strong><code>down()</code> can destroy data</strong>A <code>down()</code> that drops a column also deletes everything written into it since the deploy, including orders and customer data. Read the migration's <code>down()</code> before running it.</div>
+
+<p><b>3. Restore a database backup.</b> This is the safest option for a disaster, but you <b>lose every order and signup made since the backup</b>.
+On a live shop, use it only if option 2 is impossible. The easy way is <code>sudo bin/rollback.sh shopper1 --restore-backup</code>,
+which uses the backup the deploy took automatically. By hand:</p>
+<pre><code><span class="c"># backups taken by deploys</span>
+sudo ls -lh /srv/apps/shopper1/shared/backups/
+<span class="c"># take one yourself before something risky</span>
+sudo -u postgres pg_dump -Fc shopper1 &gt; /backup/shopper1-before-v1.3.dump
+<span class="c"># restore (stop the site's workers first: sudo supervisorctl stop 'shopper1:*')</span>
+sudo -u postgres pg_restore --clean --if-exists -d shopper1 &lt; /backup/shopper1-before-v1.3.dump</code></pre>
+
+<h3 id="db-seeders">Custom seeders</h3>
+<p>A seeder is a class that fills the database with data you define: categories, countries, roles, default settings, demo products.</p>
+
+<p><b>1. Create it on your PC</b> (in the app repo, e.g. <code>shopper</code>):</p>
+<pre><code>php artisan make:seeder CategorySeeder</code></pre>
+
+<p><b>2. Make it safe to run more than once.</b> On a live shop, a seeder may run twice, on both shops, or again after a fix.
+Use <code>updateOrCreate</code> / <code>updateOrInsert</code> / <code>firstOrCreate</code>, never plain <code>create</code>:</p>
+<pre><code>&lt;?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
+
+class CategorySeeder extends Seeder
+{
+    public function run(): void
+    {
+        $categories = [
+            ['slug' =&gt; 'men',         'name' =&gt; 'Men'],
+            ['slug' =&gt; 'women',       'name' =&gt; 'Women'],
+            ['slug' =&gt; 'accessories', 'name' =&gt; 'Accessories'],
+        ];
+
+        foreach ($categories as $category) {
+            // matched on slug: existing rows are updated, nothing is duplicated
+            DB::table('categories')-&gt;updateOrInsert(
+                ['slug' =&gt; $category['slug']],
+                ['name' =&gt; $category['name'], 'updated_at' =&gt; now()],
+            );
+        }
+    }
+}</code></pre>
+<p>With an Eloquent model it's one line per row: <code>Category::updateOrCreate(['slug' =&gt; 'men'], ['name' =&gt; 'Men']);</code>.
+Table and model names depend on your app: Shopper has its own tables and models, so check them in your code first.</p>
+<p>Optionally register it in <code>database/seeders/DatabaseSeeder.php</code>, so a plain <code>db:seed</code> runs it too:</p>
+<pre><code>public function run(): void
+{
+    $this-&gt;call([
+        CategorySeeder::class,
+    ]);
+}</code></pre>
+
+<p><b>3. Commit and push</b>, then <b>4. deploy with the seeder</b>. This is the easy way: it runs after migrations and <b>before</b> the switch,
+so if the seeder fails, the new version never goes live:</p>
+<pre><code>sudo bin/deploy-laravel.sh shopper1 --seed=CategorySeeder
+sudo bin/deploy-laravel.sh shopper2 --seed=CategorySeeder
+<span class="c"># several seeders, or everything in DatabaseSeeder</span>
+sudo bin/deploy-laravel.sh shopper1 --seed=CategorySeeder --seed=BrandSeeder
+sudo bin/deploy-laravel.sh shopper1 --seed</code></pre>
+<div class="callout info"><strong>"Before the switch" is about the code</strong>The seeder writes into the <b>live database</b>, so its data is visible to the current site as soon as it runs. That's another reason to write seeders that are safe to run more than once.</div>
+<p>Or run a seeder <b>without</b> deploying, on the code that's already live:</p>
+<pre><code><span class="c"># one shop</span>
+sudo -u shopper1 -H php8.3 /srv/apps/shopper1/current/artisan db:seed --class=CategorySeeder --force
+<span class="c"># both shops (same code, separate databases)</span>
+for s in shopper1 shopper2; do sudo -u $s -H php8.3 /srv/apps/$s/current/artisan db:seed --class=CategorySeeder --force; done</code></pre>
+<ul>
+<li><code>--class=</code> runs only that seeder. Without it, everything in <code>DatabaseSeeder</code> runs.</li>
+<li><code>--force</code> is required in production (otherwise Laravel asks for confirmation and stops).</li>
+<li><code>sudo -u shopper1</code> runs it as that site's user, so it uses that site's <code>.env</code> and database.</li>
+</ul>
+
+<h3>Seeder or migration?</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Use a…</th><th>For</th></tr></thead>
+<tbody>
+<tr><td><b>Seeder</b></td><td>Base / reference data you may re-apply: categories, countries, roles, default settings, demo products on a test shop</td></tr>
+<tr><td><b>Migration</b></td><td>A <b>one-time</b> change to live data ("mark all old products inactive", "move prices to the new column"). It runs exactly once, automatically with the deploy, in order</td></tr>
+</tbody></table></div>
+<p>To have seed data arrive <b>automatically with a deploy, exactly once</b>, call the seeder from a migration:</p>
+<pre><code>public function up(): void
+{
+    (new \Database\Seeders\CategorySeeder)-&gt;run();
+}</code></pre>
+
+<h3 id="db-tags">Git tags</h3>
+<p>The deploy script takes any <b>branch or tag</b> name as its second argument and deploys exactly that code. With no name, it deploys <code>REPO_BRANCH</code> (<code>main</code>).
+You create the tags yourself, on your PC:</p>
+<pre><code><span class="c"># on your PC, in the app repo</span>
+git tag v1.3.0
+git push origin v1.3.0
+<span class="c"># on the server</span>
+sudo bin/deploy-laravel.sh shopper1 v1.3.0</code></pre>
+<ul>
+<li>A tag always means the same code, so redeploying an older tag (<code>… shopper1 v1.2.0</code>) is an alternative to a rollback. It builds a fresh release of that version, but still doesn't undo migrations.</li>
+<li>Use <a href="https://semver.org" rel="noopener">semantic versions</a>: <code>v1.3.1</code> = bug fix, <code>v1.4.0</code> = new features, <code>v2.0.0</code> = breaking change (e.g. a migration old code can't survive).</li>
+<li>List tags with <code>git tag</code>; see what's in one with <code>git show v1.3.0 --stat</code>.</li>
+<li>Release folders are named by date (<code>releases/20261002143000</code>), but each one's <code>.release</code> record stores the tag and commit.
+See them with <code>sudo bin/rollback.sh shopper1 --list</code>.</li>
+</ul>
+</section>
+
+<section id="changes">
+<h2>Changelog</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Change</th><th>What it means for you</th></tr></thead>
+<tbody>
+<tr><td><code>shopper:setup</code> from settings + app commands in deploy</td><td>Per-shop <code>SETUP_*</code> values in <code>.env</code> feed <code>bin/shopper-setup.sh</code> and <code>RUN_SHOPPER_SETUP=first|always</code>. <code>FIRST_DEPLOY_ARTISAN</code> / <code>DEPLOY_ARTISAN</code> / <code>--artisan=</code> run other commands before config caching</td></tr>
+<tr><td><code>bin/rollback.sh</code>: guided rollback</td><td>Lists releases, counts exactly which migrations to undo (never older ones), previews the SQL, makes you type the count, verifies the result. Refuses unsafe cases</td></tr>
+<tr><td>Deploy: automatic backup, <code>--seed</code>, release records</td><td>A DB backup is taken when migrations are pending. Seeders run before the switch. Each release records its tag, commit and batch. A failed deploy prints how to undo its migrations</td></tr>
+<tr><td>Server-side repo access via deploy key</td><td>Clone and pull over <code>git@github.com:</code>. https + password no longer works for private repos</td></tr>
+<tr><td>Env files tolerate Windows line endings</td><td>Editing <code>.env</code> in Notepad no longer breaks domains and values</td></tr>
+<tr><td>Firewall opens the real SSH port</td><td>A custom SSH port can't lock you out when <code>setup.sh</code> enables ufw</td></tr>
+<tr><td><code>create-instance.sh</code> creates the home folder itself</td><td>Fixes <code>chmod: cannot access '/srv/apps/…'</code> when re-running after a failed attempt</td></tr>
+<tr><td>Deploy falls back to <code>npm install</code></td><td>Apps without <code>package-lock.json</code> deploy fine</td></tr>
+<tr><td>New section: Migrations, seeders &amp; rollback</td><td>Why code rollbacks don't undo the database, safe migration patterns, <code>migrate:rollback</code> order, custom seeders, git tags</td></tr>
+<tr><td>New sections: Releases &amp; git pull, Users &amp; passwords</td><td>Where every credential lives, how deploys and rollbacks work, and where <code>git pull</code> belongs</td></tr>
+<tr><td>New instance type <code>site</code> + the <code>website</code> instance</td><td>hsaverse.shop / www.hsaverse.shop serve <code>sites/website/</code>. Plain PHP/HTML, no database or workers</td></tr>
+<tr><td>PHP <code>soap</code> extension installed by default</td><td>Required by <code>shopper/shipping</code> (carrier rate APIs). The check page and <code>check-php-ext.sh</code> now test for it</td></tr>
+<tr><td>Per-site deploy keys documented</td><td>shopper1 and shopper2 each add their own key to the <code>shopper</code> repo</td></tr>
+</tbody></table></div>
+</section>
+
+<footer>server-stack · docs/guide.html · keep this file next to the scripts, and update it when you change them.</footer>
+</main>
+</div>
+
+<script>
+// copy buttons on every code block
+document.querySelectorAll('pre').forEach(function (pre) {
+  var btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'copy'; btn.textContent = 'Copy';
+  btn.addEventListener('click', function () {
+    var text = pre.querySelector('code').innerText
+      .split('\n').filter(function (l) { return !/^\s*#/.test(l); }).join('\n').trim();
+    var done = function () { btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = 'Copy'; }, 1400); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () { btn.textContent = 'Select & copy'; });
+    } else {
+      var r = document.createRange(); r.selectNodeContents(pre.querySelector('code'));
+      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      try { document.execCommand('copy'); done(); } catch (e) { btn.textContent = 'Select & copy'; }
+    }
+  });
+  pre.appendChild(btn);
+});
+
+// highlight the current section in the table of contents
+var links = Array.prototype.slice.call(document.querySelectorAll('nav.toc a'));
+if ('IntersectionObserver' in window) {
+  var obs = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (!e.isIntersecting) return;
+      links.forEach(function (a) { a.classList.toggle('active', a.getAttribute('href') === '#' + e.target.id); });
+    });
+  }, { rootMargin: '0px 0px -70% 0px' });
+  document.querySelectorAll('section[id], h3[id]').forEach(function (el) { obs.observe(el); });
+}
+
+// theme toggle (remembered per browser when storage is available)
+(function () {
+  var root = document.documentElement, key = 'stack-guide-theme';
+  try { var saved = localStorage.getItem(key); if (saved) root.setAttribute('data-theme', saved); } catch (e) {}
+  document.getElementById('themeToggle').addEventListener('click', function () {
+    var dark = root.getAttribute('data-theme') === 'dark' ||
+      (!root.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var next = dark ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem(key, next); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>
