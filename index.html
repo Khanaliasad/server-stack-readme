@@ -463,18 +463,38 @@ Its files live in this repo at <code>sites/website/</code>.</p>
 <p>A second plain site: copy <code>instances/website.env</code> to <code>instances/&lt;name&gt;.env</code>, set <code>APP_NAME=&lt;name&gt;</code>, create <code>sites/&lt;name&gt;/index.php</code>, add <code>&lt;NAME&gt;__SERVER_NAME</code> + the name to <code>INSTANCES</code> in <code>.env</code>, then run <code>sudo bin/setup.sh --skip-install</code>.</p>
 <div class="callout warn"><strong>Only <code>index.php</code> runs as PHP</strong>By design, other <code>.php</code> files return 404. Route extra pages through <code>index.php</code> (e.g. <code>index.php?page=about</code>) or use <code>.html</code> files. Remove <code>phpinfo()</code> before going public.</div>
 
-<h3 id="r-add">Add another website (e.g. shopper2)</h3>
+<h3 id="r-add">Add another shop (e.g. shopper3)</h3>
+<p>The name (here <code>shopper3</code>) becomes the Linux user, database, folder <code>/srv/apps/shopper3</code> and the
+<code>.env</code> prefix <code>SHOPPER3__</code>. Use lowercase letters, numbers and <code>_</code> only. The domain can be
+anything you own (e.g. name <code>asad</code>, domain <code>qwerty.info</code> → prefix <code>ASAD__</code>).</p>
 <ol>
-<li>Add a DNS A record, e.g. <code>shop2</code> → server IP.</li>
-<li>In <code>/srv/stack/.env</code>:
-<pre><code>INSTANCES="shopper1 shopper2"
-SHOPPER2__SERVER_NAME="shop2.hsaverse.shop"</code></pre></li>
-<li>Check and apply:
-<pre><code>sudo bin/show-config.sh
-sudo bin/setup.sh --skip-install</code></pre></li>
+<li><b>Instance file</b> (on your PC, then commit and push). Copy an existing one and change the <code>&lt;-- UNIQUE</code> lines:
+<code>APP_NAME</code>, <code>DB_NAME</code>, <code>DB_USER</code> = the name, and <code>REDIS_DB</code> / <code>REDIS_CACHE_DB</code> = the next unused pair.
+Check what is taken with <code>grep -h REDIS instances/*.env</code> (0–7 are used by shopper1, shopper2, bagisto, shopper3).
+<pre><code>cp instances/shopper2.env instances/shopper3.env</code></pre></li>
+<li><b>DNS</b>: an A record for the domain → server IP (<code>shop3</code> in hsaverse.shop, or <code>@</code> + <code>www</code> at the new domain's registrar). Wait until <code>dig +short shop3.hsaverse.shop</code> shows the IP, or the certificate step fails.</li>
+<li><b>Server</b>: <code>cd /srv/stack &amp;&amp; git pull</code>, then in <code>/srv/stack/.env</code> add the name to <code>INSTANCES</code> and a block for it:
+<pre><code>INSTANCES="website shopper1 shopper2 shopper3 odoo"
+
+<span class="c"># shopper3 — Laravel Shopper</span>
+SHOPPER3__SERVER_NAME="shop3.hsaverse.shop"      <span class="c"># or "qwerty.info www.qwerty.info"</span>
+SHOPPER3__REPO_URL=git@github.com:Khanaliasad/shopper.git
+SHOPPER3__REPO_BRANCH=main
+SHOPPER3__APPENV_MAIL_FROM_NAME="Shop Three"
+SHOPPER3__PHP_VERSION=8.3
+SHOPPER3__RUN_SHOPPER_SETUP=first
+SHOPPER3__SETUP_ADMIN_EMAIL=you@example.com
+SHOPPER3__SETUP_STORE_NAME="HSA Verse 3"
+<span class="c"># …other SETUP_* keys as for shopper1</span></code></pre></li>
+<li><b>Create it</b> (user, folders, database, nginx, PHP-FPM, certificate). Check first, then apply:
+<pre><code>sudo bin/show-config.sh shopper3
+sudo bin/create-instance.sh shopper3 &amp;&amp; sudo bin/render.sh shopper3 &amp;&amp; sudo bin/issue-cert.sh shopper3</code></pre>
+(<code>sudo bin/setup.sh --skip-install</code> does the same for every instance.)</li>
+<li><b>Deploy key</b> for the new user, added on GitHub as in <a href="#r-deploy">Deploy a Laravel app</a> (use <code>u=shopper3</code>).</li>
+<li><b>First deploy</b> with seeders:
+<pre><code>sudo bin/deploy-laravel.sh shopper3 --seed</code></pre>
+Then log in at <code>https://&lt;domain&gt;/cpanel/login</code>. No login yet? See <a href="#r-admin">Reset a Shopper admin login</a>.</li>
 </ol>
-<p>For a brand-new name (e.g. <code>shopper3</code>), first copy the instance file, then edit its <code>&lt;-- UNIQUE</code> lines (APP_NAME, DB_NAME, DB_USER, REDIS_DB, REDIS_CACHE_DB):</p>
-<pre><code>cp instances/shopper2.env instances/shopper3.env</code></pre>
 
 <h3 id="r-deploy">Deploy a Laravel app from GitHub</h3>
 <p>Each site runs as its own Linux user, so <b>each site needs its own deploy key</b>, even when two sites deploy the same repo
@@ -772,7 +792,7 @@ sudo systemctl start odoo-odoo</code></pre>
 <pre><code>sudo grep -H -E '^(DB_|REDIS_PASSWORD|APP_KEY|ODOO_ADMIN)' /srv/stack/secrets/*.env /srv/apps/*/shared/.env</code></pre>
 <div class="callout warn"><strong>Treat the output as secret</strong>Don't paste it into chats, tickets or screenshots.</div>
 
-<h3>Reset a Shopper admin login</h3>
+<h3 id="r-admin">Reset a Shopper admin login</h3>
 <pre><code>sudo -u shopper1 -H php8.3 /srv/apps/shopper1/current/artisan shopper:user</code></pre>
 
 <h3>Connect to a database yourself</h3>
@@ -1007,6 +1027,9 @@ See them with <code>sudo bin/rollback.sh shopper1 --list</code>.</li>
 <div class="table-wrap"><table>
 <thead><tr><th>Change</th><th>What it means for you</th></tr></thead>
 <tbody>
+<tr><td>Adding a shop: step-by-step</td><td><a href="#r-add">Add another shop</a> covers any name and domain. <code>instances/shopper3.env</code> exists (Redis DB 6/7)</td></tr>
+<tr><td>nginx: <code>/cpanel/</code> no longer 403</td><td>The working <code>public/cpanel</code> folder link made nginx answer 403. Run <code>sudo bin/render.sh &lt;shop&gt;</code> for each shop after <code>git pull</code></td></tr>
+<tr><td>Deploy retries a failed front-end build</td><td>"Cannot find native binding" (npm optional-deps bug) → clean <code>npm install</code> and one retry</td></tr>
 <tr><td><code>shopper:setup</code> from settings + app commands in deploy</td><td>Per-shop <code>SETUP_*</code> values in <code>.env</code> feed <code>bin/shopper-setup.sh</code> and <code>RUN_SHOPPER_SETUP=first|always</code>. <code>FIRST_DEPLOY_ARTISAN</code> / <code>DEPLOY_ARTISAN</code> / <code>--artisan=</code> run other commands before config caching</td></tr>
 <tr><td><code>bin/rollback.sh</code>: guided rollback</td><td>Lists releases, counts exactly which migrations to undo (never older ones), previews the SQL, makes you type the count, verifies the result. Refuses unsafe cases</td></tr>
 <tr><td>Deploy: automatic backup, <code>--seed</code>, release records</td><td>A DB backup is taken when migrations are pending. Seeders run before the switch. Each release records its tag, commit and batch. A failed deploy prints how to undo its migrations</td></tr>
