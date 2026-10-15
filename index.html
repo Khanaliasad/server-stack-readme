@@ -108,6 +108,7 @@ footer { margin-top: 64px; color: var(--muted); font-size: 14px; border-top: 1px
     <li><a href="#where">5. Where settings go</a></li>
     <li><a href="#commands">6. Command reference</a></li>
     <li><a href="#recipes">7. How to…</a></li>
+    <li class="sub"><a href="new-shop.html">Add a shop (step by step)</a></li>
     <li><a href="#dns">8. DNS &amp; email</a></li>
     <li><a href="#layout">9. Files on the server</a></li>
     <li><a href="#logs">10. Logs &amp; health</a></li>
@@ -464,6 +465,7 @@ Its files live in this repo at <code>sites/website/</code>.</p>
 <div class="callout warn"><strong>Only <code>index.php</code> runs as PHP</strong>By design, other <code>.php</code> files return 404. Route extra pages through <code>index.php</code> (e.g. <code>index.php?page=about</code>) or use <code>.html</code> files. Remove <code>phpinfo()</code> before going public.</div>
 
 <h3 id="r-add">Add another shop (e.g. shopper3)</h3>
+<p><b>Full walkthrough with every command:</b> <a href="new-shop.html">Add a shop, step by step</a>.</p>
 <p>The name (here <code>shopper3</code>) becomes the Linux user, database, folder <code>/srv/apps/shopper3</code> and the
 <code>.env</code> prefix <code>SHOPPER3__</code>. Use lowercase letters, numbers and <code>_</code> only. The domain can be
 anything you own (e.g. name <code>asad</code>, domain <code>qwerty.info</code> → prefix <code>ASAD__</code>).</p>
@@ -484,13 +486,17 @@ SHOPPER3__APPENV_MAIL_FROM_NAME="Shop Three"
 SHOPPER3__PHP_VERSION=8.3
 SHOPPER3__RUN_SHOPPER_SETUP=first
 SHOPPER3__SETUP_ADMIN_EMAIL=you@example.com
+SHOPPER3__SETUP_ADMIN_PASSWORD='a-strong-password'   <span class="c"># required: nothing generates it</span>
 SHOPPER3__SETUP_STORE_NAME="HSA Verse 3"
 <span class="c"># …other SETUP_* keys as for shopper1</span></code></pre></li>
 <li><b>Create it</b> (user, folders, database, nginx, PHP-FPM, certificate). Check first, then apply:
 <pre><code>sudo bin/show-config.sh shopper3
 sudo bin/create-instance.sh shopper3 &amp;&amp; sudo bin/render.sh shopper3 &amp;&amp; sudo bin/issue-cert.sh shopper3</code></pre>
 (<code>sudo bin/setup.sh --skip-install</code> does the same for every instance.)</li>
-<li><b>Deploy key</b> for the new user, added on GitHub as in <a href="#r-deploy">Deploy a Laravel app</a> (use <code>u=shopper3</code>).</li>
+<li><b>Deploy key</b> for the new user, then add the printed line on GitHub → repo → Settings → Deploy keys (read-only):
+<pre><code>sudo -u shopper3 -H ssh-keygen -t ed25519 -N "" -f /srv/apps/shopper3/.ssh/id_ed25519 -C "shopper3@server"
+sudo cat /srv/apps/shopper3/.ssh/id_ed25519.pub
+sudo -u shopper3 -H ssh -o StrictHostKeyChecking=accept-new -T git@github.com</code></pre></li>
 <li><b>First deploy</b> with seeders:
 <pre><code>sudo bin/deploy-laravel.sh shopper3 --seed</code></pre>
 Then log in at <code>https://&lt;domain&gt;/cpanel/login</code>. No login yet? See <a href="#r-admin">Reset a Shopper admin login</a>.</li>
