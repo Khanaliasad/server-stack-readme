@@ -98,6 +98,7 @@ footer { margin-top: 64px; color: var(--muted); font-size: 14px; border-top: 1px
   <div class="sub">Add a shop</div>
   <ol>
     <li><a href="guide.html">← Back to the guide</a></li>
+    <li><a href="#s0">0. Instance file (new names)</a></li>
     <li><a href="#s1">1. DNS</a></li>
     <li><a href="#s2">2. Get the latest stack</a></li>
     <li><a href="#s3">3. Edit .env</a></li>
@@ -108,6 +109,7 @@ footer { margin-top: 64px; color: var(--muted); font-size: 14px; border-top: 1px
     <li><a href="#s8">8. Log in</a></li>
     <li><a href="#other">Other names &amp; domains</a></li>
     <li><a href="#fail">If something fails</a></li>
+    <li><a href="#restart">Start over</a></li>
   </ol>
   <button class="theme-toggle" type="button" id="themeToggle">Toggle dark / light</button>
 </nav>
@@ -120,6 +122,20 @@ footer { margin-top: 64px; color: var(--muted); font-size: 14px; border-top: 1px
 </header>
 
 <section>
+<h3 id="s0">0. Instance file (new names only)</h3>
+<p>Every shop needs its own <code>instances/&lt;name&gt;.env</code> in the stack repo. Without it, <code>show-config.sh</code> says
+<code>ERROR: no instances/&lt;name&gt;.env</code>. <code>shopper3</code> and <code>solemenders</code> already have one, so skip this step for them.
+For any other name, do this <b>on your PC</b>, not on the server, or the next <code>git pull</code> there will conflict:</p>
+<ol>
+<li>Pick a name: lowercase letters, numbers and <code>_</code> only. It becomes the Linux user, the database and <code>/srv/apps/&lt;name&gt;</code>.</li>
+<li>Find the next free Redis pair (the highest number shown, plus 1 and plus 2):
+<pre><code>grep -h "^REDIS" instances/*.env | sort -t= -k2 -n | tail -2</code></pre></li>
+<li>Copy an existing file and change <code>APP_NAME</code>, <code>DB_NAME</code>, <code>DB_USER</code> (= the name), <code>REDIS_DB</code>, <code>REDIS_CACHE_DB</code>, <code>SERVER_NAME</code> and <code>REPO_URL</code>:
+<pre><code>cp instances/shopper3.env instances/&lt;name&gt;.env</code></pre></li>
+<li>Commit and push it. Step 2 below brings it to the server.</li>
+</ol>
+<p>Redis pairs in use: shopper1 0/1, shopper2 2/3, bagisto 4/5, shopper3 6/7, solemenders 8/9.</p>
+
 <h3 id="s1">1. DNS</h3>
 <p>At the DNS provider for hsaverse.shop, add an <b>A record</b>: <code>shop3</code> → <code>207.180.249.190</code>. Check it:</p>
 <pre><code>dig +short shop3.hsaverse.shop</code></pre>
@@ -177,7 +193,15 @@ sudo cat /srv/apps/shopper3/.ssh/id_ed25519.pub</code></pre>
 
 <h3 id="s7">7. First deploy</h3>
 <pre><code>sudo bin/deploy-laravel.sh shopper3 --seed</code></pre>
-<p>This also runs <code>shopper:setup</code> (admin user and store details) because of <code>RUN_SHOPPER_SETUP=first</code>.</p>
+<p>In order, the deploy:</p>
+<ol>
+<li>runs the migrations</li>
+<li>runs <code>DatabaseSeeder</code>. On an empty database it first runs Shopper's own seeders (countries, currencies, channel, carriers, payment methods, and the <code>administrator</code> / <code>manager</code> roles), which is what <code>shopper:install</code> would do. Then it runs the app's POS, permission and settings seeders.</li>
+<li>runs <code>shopper:setup</code> (admin user and store details), because of <code>RUN_SHOPPER_SETUP=first</code></li>
+</ol>
+<p><b>Why not <code>shopper:install</code>?</b> It asks questions and waits for answers, and a deploy has nobody to answer them. The deploy never calls it. <code>DatabaseSeeder</code> and <code>shopper:setup</code> do the same work without questions.</p>
+<p>The app needs commit <code>7a3f2b4</code> or later on <code>main</code>. If it's older, use this instead (empty database only, because these seeders duplicate rows when run twice):</p>
+<pre><code>sudo bin/deploy-laravel.sh shopper3 --seed='Shopper\Core\Database\Seeders\ShopperSeeder' --seed='Shopper\Database\Seeders\AuthTableSeeder' --seed</code></pre>
 
 <h3 id="s8">8. Log in</h3>
 <p>Go to <code>https://shop3.hsaverse.shop/cpanel/login</code> and use the email and password from step 3.</p>
@@ -187,7 +211,7 @@ sudo cat /srv/apps/shopper3/.ssh/id_ed25519.pub</code></pre>
 <ul>
 <li>Use lowercase letters, numbers and <code>_</code> only. The name becomes the Linux user, the database and <code>/srv/apps/asad</code>.</li>
 <li>On your PC, create <code>instances/asad.env</code>: copy <code>instances/shopper3.env</code> and change <code>APP_NAME</code>, <code>DB_NAME</code> and <code>DB_USER</code> to <code>asad</code>.
-Set <code>REDIS_DB</code> / <code>REDIS_CACHE_DB</code> to the next free pair (<code>grep -h REDIS instances/*.env</code>; 0–7 are taken, so use 8/9). Commit and push, then do step 2.</li>
+Set <code>REDIS_DB</code> / <code>REDIS_CACHE_DB</code> to the next free pair (<code>grep -h REDIS instances/*.env</code>; 0–9 are taken, so use 10/11). Commit and push, then do step 2.</li>
 <li>DNS: at the registrar for qwerty.info, add A records for <code>@</code> and <code>www</code> → <code>207.180.249.190</code>.</li>
 <li>In <code>.env</code> the prefix is <code>ASAD__</code>, e.g. <code>ASAD__SERVER_NAME="qwerty.info www.qwerty.info"</code>. Add <code>asad</code> to <code>INSTANCES</code>.</li>
 <li>In every command, replace <code>shopper3</code> with <code>asad</code>.</li>
@@ -197,12 +221,21 @@ Set <code>REDIS_DB</code> / <code>REDIS_CACHE_DB</code> to the next free pair (<
 <div class="table-wrap"><table>
 <thead><tr><th>Error</th><th>Fix</th></tr></thead>
 <tbody>
+<tr><td><code>There is no role named `administrator`</code></td><td>Shopper's seeders didn't run (app older than <code>7a3f2b4</code>). Start over below, then deploy with a current app</td></tr>
+<tr><td><code>migrate:rollback</code>: "prohibited from running in this environment"</td><td>The app blocks destructive commands in production. For a new shop, don't roll back. Start over below</td></tr>
 <tr><td><code>shopper:setup needs at least …_SETUP_ADMIN_EMAIL and …_SETUP_ADMIN_PASSWORD</code></td><td>The password is empty in <code>.env</code>. Set it (step 3) and deploy again</td></tr>
 <tr><td>Certificate error in step 5</td><td>DNS doesn't point to the server yet. Wait, then run <code>sudo bin/issue-cert.sh shopper3</code></td></tr>
 <tr><td><code>Permission denied (publickey)</code></td><td>The deploy key isn't on the repo (step 6)</td></tr>
 <tr><td><code>Cannot find native binding</code> during the build</td><td>npm bug. The deploy retries once by itself. If it still fails, deploy again</td></tr>
 <tr><td>403 on <code>/cpanel/</code></td><td><code>git pull</code>, then <code>sudo bin/render.sh shopper3 &amp;&amp; sudo systemctl reload nginx</code></td></tr>
 </tbody></table></div>
+<h3 id="restart">Start over (a new shop that failed)</h3>
+<p>Deleting <code>/srv/apps/shopper3</code> by hand is <b>not enough</b>: the database and its tables stay. Remove the app, Linux user and database together.
+This keeps the SSL certificate and <code>.env</code>. Preview first:</p>
+<pre><code>sudo bin/uninstall.sh --apps --databases --dry-run shopper3
+sudo bin/uninstall.sh --apps --databases shopper3</code></pre>
+<p>Then do steps 5–7 again. The deploy key was deleted with the folder, so remove the old <code>shopper3</code> key on GitHub and add the new one. <b>Never run this on a live shop</b>: it deletes its orders and customers.</p>
+
 <p>More in the guide: <a href="guide.html#trouble">Troubleshooting</a>, <a href="guide.html#credentials">Users &amp; passwords</a>.</p>
 </section>
 </main>
